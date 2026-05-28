@@ -1,0 +1,16 @@
+node_modules/
+__pycache__/
+*.pyc
+*.db
+*.log
+.env
+.vscode/
+.idea/
+dist/
+build/
+*.egg-info/
+.venv/
+venv/
+uploads/
+*.xlsx
+!uploads/.gitkeep
