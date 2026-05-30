@@ -100,25 +100,39 @@ class Question(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
         if shuffle_options:
+            import random
             options = []
             option_labels = ['A', 'B', 'C', 'D', 'E', 'F']
             option_keys = ['option_a', 'option_b', 'option_c', 'option_d', 'option_e', 'option_f']
             option_html_keys = ['option_a_html', 'option_b_html', 'option_c_html', 'option_d_html', 'option_e_html', 'option_f_html']
+            
+            original_options = []
             for i, key in enumerate(option_keys):
                 if getattr(self, key):
-                    options.append({
-                        'label': option_labels[i],
+                    original_options.append({
+                        'original_label': option_labels[i],
                         'content': getattr(self, key),
                         'html': getattr(self, option_html_keys[i])
                     })
-            import random
-            random.shuffle(options)
-            result['shuffled_options'] = options
+            
+            random.shuffle(original_options)
+            
+            shuffled_options = []
+            for idx, opt in enumerate(original_options):
+                shuffled_options.append({
+                    'label': option_labels[idx],
+                    'content': opt['content'],
+                    'html': opt['html']
+                })
+            
+            result['shuffled_options'] = shuffled_options
+            
             original_answer = self.answer.upper()
-            answer_map = {}
-            for idx, opt in enumerate(options):
-                answer_map[opt['label']] = idx
-            new_answer = ''.join([str(answer_map.get(c, c)) for c in original_answer])
+            label_map = {}
+            for idx, opt in enumerate(original_options):
+                label_map[opt['original_label']] = option_labels[idx]
+            
+            new_answer = ''.join([label_map.get(c, c) for c in original_answer])
             result['shuffled_answer'] = new_answer
         return result
 

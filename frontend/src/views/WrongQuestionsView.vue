@@ -320,6 +320,9 @@ onMounted(() => {
 <style scoped>
 .wrong-questions-view {
   padding: 20px;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 .chapter-select-content {
@@ -379,5 +382,24 @@ onMounted(() => {
   padding: 10px;
   background: #f5f7fa;
   border-radius: 6px;
+}
+
+:deep(.card) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+:deep(.el-table) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+:deep(.el-table__body-wrapper) {
+  overflow-x: auto;
+}
+
+:deep(.filter-bar) {
+  flex-wrap: wrap;
+  gap: 10px;
 }
 </style>
