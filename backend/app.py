@@ -559,6 +559,7 @@ def practice_sequential():
     data = request.json
     chapter_ids = data.get('chapter_ids', [])
     question_type_id = data.get('question_type_id')
+    shuffle_options = data.get('shuffle_options', False)
 
     query = Question.query.filter_by(status='published')
     if chapter_ids:
@@ -569,7 +570,7 @@ def practice_sequential():
     questions = query.order_by(Question.id).all()
     result = []
     for q in questions:
-        q_dict = q.to_dict()
+        q_dict = q.to_dict(shuffle_options=shuffle_options)
         result.append(q_dict)
 
     session_id = str(uuid.uuid4())
@@ -780,15 +781,33 @@ def handle_wrong_questions():
         per_page = request.args.get('per_page', 20, type=int)
         question_type_id = request.args.get('question_type_id', type=int)
         chapter_id = request.args.get('chapter_id', type=int)
-        min_wrong_count = request.args.get('min_wrong_count', type=int)
+        wrong_count_eq = request.args.get('wrong_count_eq', type=int)
+        min_reappearance_count = request.args.get('min_reappearance_count', type=int)
 
         query = WrongQuestion.query.filter_by(user_id=user_id)
         if question_type_id:
             query = query.join(Question).filter(Question.question_type_id == question_type_id)
         if chapter_id:
             query = query.join(Question).filter(Question.chapter_id == chapter_id)
-        if min_wrong_count is not None:
-            query = query.filter(WrongQuestion.wrong_count >= min_wrong_count)
+        if wrong_count_eq is not None:
+            if wrong_count_eq == 1:
+                query = query.filter(WrongQuestion.wrong_count == 1)
+            elif wrong_count_eq == 2:
+                query = query.filter(WrongQuestion.wrong_count == 2)
+            elif wrong_count_eq == 3:
+                query = query.filter(WrongQuestion.wrong_count == 3)
+            elif wrong_count_eq == 4:
+                query = query.filter(WrongQuestion.wrong_count > 3)
+            elif wrong_count_eq == 5:
+                query = query.filter(WrongQuestion.wrong_count == 4)
+            elif wrong_count_eq == 6:
+                query = query.filter(WrongQuestion.wrong_count == 5)
+            elif wrong_count_eq == 7:
+                query = query.filter(WrongQuestion.wrong_count > 5)
+            else:
+                query = query.filter(WrongQuestion.wrong_count == wrong_count_eq)
+        if min_reappearance_count is not None:
+            query = query.filter(WrongQuestion.reappearance_count >= min_reappearance_count)
 
         pagination = query.order_by(WrongQuestion.last_wrong_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
         return jsonify({
@@ -849,9 +868,11 @@ def practice_wrong_questions():
     shuffle = request.json.get('shuffle', True)
     shuffle_options = request.json.get('shuffle_options', True)
     chapter_ids = request.json.get('chapter_ids', [])
+    wrong_ids = request.json.get('wrong_ids', [])
     
     print(f"DEBUG - user_id: {user_id}")
     print(f"DEBUG - chapter_ids: {chapter_ids}")
+    print(f"DEBUG - wrong_ids: {wrong_ids}")
     print(f"DEBUG - shuffle_options: {shuffle_options}")
 
     query = WrongQuestion.query.filter_by(user_id=user_id)
@@ -859,6 +880,10 @@ def practice_wrong_questions():
     if chapter_ids and len(chapter_ids) > 0:
         print(f"DEBUG - Filtering by chapters: {chapter_ids}")
         query = query.join(Question).filter(Question.chapter_id.in_(chapter_ids))
+    
+    if wrong_ids and len(wrong_ids) > 0:
+        print(f"DEBUG - Filtering by wrong_ids: {wrong_ids}")
+        query = query.filter(WrongQuestion.id.in_(wrong_ids))
     
     wrong_questions = query.all()
     print(f"DEBUG - Found {len(wrong_questions)} wrong questions")
@@ -942,9 +967,14 @@ def submit_answer():
     question_id = data.get('question_id')
     user_answer = data.get('answer', '').upper()
     user_id = data.get('user_id', 'default_user')
+    expected_answer = data.get('expected_answer')
 
     question = Question.query.get_or_404(question_id)
-    is_correct = user_answer == question.answer.upper()
+    if expected_answer is not None and expected_answer != '':
+        correct_answer = expected_answer.upper()
+    else:
+        correct_answer = question.answer.upper()
+    is_correct = user_answer == correct_answer
 
     answer = UserAnswer(
         session_id=session_id,
@@ -972,7 +1002,7 @@ def submit_answer():
         'status': 'ok',
         'data': {
             'is_correct': is_correct,
-            'correct_answer': question.answer,
+            'correct_answer': correct_answer,
             'explanation': question.explanation,
             'explanation_html': question.explanation_html
         }

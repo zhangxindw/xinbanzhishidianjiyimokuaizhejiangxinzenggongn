@@ -1,11 +1,11 @@
 <template>
   <div class="questions-view">
-    <div class="page-header" style="display: flex; justify-content: space-between; align-items: center;">
-      <div>
+    <div class="page-header">
+      <div class="page-header-left">
         <h2>题库管理</h2>
         <p>管理所有题目，支持批量操作</p>
       </div>
-      <div>
+      <div class="page-header-right">
         <el-button type="primary" @click="$router.push('/questions/new')">
           <el-icon><Plus /></el-icon>
           新建题目
@@ -22,21 +22,21 @@
     </div>
 
     <div class="card">
-      <div class="filter-bar" style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 20px;">
-        <el-input v-model="filters.stem" placeholder="搜索题干" style="width: 200px;" clearable @change="loadQuestions" />
-        <el-select v-model="filters.chapter_id" placeholder="选择章节" style="width: 150px;" clearable @change="loadQuestions">
+      <div class="filter-bar">
+        <el-input v-model="filters.stem" placeholder="搜索题干" style="flex: 1; min-width: 100px; max-width: 200px;" clearable @change="loadQuestions" />
+        <el-select v-model="filters.chapter_id" placeholder="选择章节" style="flex: 1; min-width: 100px; max-width: 180px;" clearable @change="loadQuestions">
           <el-option v-for="ch in chapters" :key="ch.id" :label="ch.name" :value="ch.id" />
           <el-option label="未分配章节" :value="0" />
         </el-select>
-        <el-select v-model="filters.question_type_id" placeholder="选择题型" style="width: 150px;" clearable @change="loadQuestions">
+        <el-select v-model="filters.question_type_id" placeholder="选择题型" style="flex: 1; min-width: 100px; max-width: 150px;" clearable @change="loadQuestions">
           <el-option v-for="qt in questionTypes" :key="qt.id" :label="qt.name" :value="qt.id" />
         </el-select>
-        <el-select v-model="filters.status" placeholder="选择状态" style="width: 120px;" clearable @change="loadQuestions">
+        <el-select v-model="filters.status" placeholder="选择状态" style="flex: 1; min-width: 100px; max-width: 130px;" clearable @change="loadQuestions">
           <el-option label="已发布" value="published" />
           <el-option label="草稿" value="draft" />
           <el-option label="隐藏" value="hidden" />
         </el-select>
-        <el-select v-model="pageSize" placeholder="每页行数" style="width: 130px;" @change="handlePageSizeChange">
+        <el-select v-model="pageSize" placeholder="每页行数" style="flex: 1; min-width: 100px; max-width: 130px;" @change="handlePageSizeChange">
           <el-option label="50行" :value="50" />
           <el-option label="100行" :value="100" />
           <el-option label="150行" :value="150" />
@@ -46,12 +46,12 @@
         </el-select>
       </div>
 
-      <div style="margin-bottom: 15px;">
+      <div class="batch-actions">
         <el-button size="small" @click="batchMoveChapter" :disabled="selectedIds.length === 0">批量移动章节</el-button>
         <el-button size="small" @click="batchChangeType" :disabled="selectedIds.length === 0">批量修改题型</el-button>
         <el-button size="small" @click="batchChangeStatus" :disabled="selectedIds.length === 0">批量修改状态</el-button>
         <el-button size="small" type="danger" @click="batchDelete" :disabled="selectedIds.length === 0">批量删除</el-button>
-        <span style="margin-left: 15px; color: #666;">已选中 {{ selectedIds.length }} 项</span>
+        <span class="selected-count">已选中 {{ selectedIds.length }} 项</span>
       </div>
 
       <el-table ref="tableRef" :data="questions" style="width: 100%" @selection-change="handleSelectionChange" v-loading="loading">
@@ -271,10 +271,113 @@ onMounted(() => {
 
 <style scoped>
 .questions-view {
-  padding: 20px;
+  padding: 16px;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+  border-radius: 12px;
+  margin-bottom: 16px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.page-header-left {
+  flex: 1;
+  min-width: 150px;
+}
+
+.page-header-left h2 {
+  margin: 0 0 4px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.page-header-left p {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+}
+
+.page-header-right {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.page-header-right .el-button {
+  min-width: auto;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.page-header-right .el-button .el-icon {
+  margin-right: 4px;
+}
+
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: visible;
 }
 
 .filter-bar > * {
-  flex-shrink: 0;
+  flex-shrink: 1;
+  flex-basis: auto;
+}
+
+.filter-bar .el-select,
+.filter-bar .el-input {
+  flex: 1;
+  min-width: 100px;
+  max-width: 200px;
+}
+
+.batch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+
+.selected-count {
+  color: #666;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+
+.card {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+:deep(.el-table) {
+  max-width: 100%;
+  overflow-x: auto;
 }
 </style>

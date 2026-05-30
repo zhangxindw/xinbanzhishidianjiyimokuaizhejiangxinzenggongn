@@ -133,10 +133,6 @@ onMounted(async () => {
   font-size: 20px;
 }
 
-.main-content.expanded {
-  margin-left: 60px;
-}
-
 .sidebar-toggle {
   position: absolute;
   bottom: 20px;

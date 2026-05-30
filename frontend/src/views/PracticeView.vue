@@ -43,11 +43,65 @@
         <p>{{ practiceModeDescription }}</p>
 
         <div v-if="practiceMode === 'memorize' || practiceMode === 'sequential'" class="config-section">
-          <div class="config-item">
-            <label>选择章节:</label>
-            <el-checkbox-group v-model="config.chapterIds">
-              <el-checkbox v-for="ch in chapters" :key="ch.id" :label="ch.id">{{ ch.name }}</el-checkbox>
-            </el-checkbox-group>
+          <div class="config-header">
+            <h3 v-if="practiceMode === 'memorize'">📚 背题配置</h3>
+            <h3 v-else>📖 顺序刷题配置</h3>
+            <span class="config-tip">选择章节开始练习</span>
+          </div>
+          
+          <div class="config-grid">
+            <div class="config-card">
+              <div class="config-card-header">
+                <el-icon><Folder /></el-icon>
+                <span>章节选择</span>
+              </div>
+              <div class="config-card-body">
+                <div class="config-item">
+                  <label>选择章节:</label>
+                  <div class="chapter-select-controls">
+                    <el-select v-model="config.chapterIds" multiple placeholder="选择章节" class="chapter-select">
+                      <el-option v-for="ch in chapters" :key="ch.id" :label="ch.name" :value="ch.id" />
+                    </el-select>
+                    <div class="chapter-select-actions">
+                      <el-button class="chapter-select-btn" @click="selectAllChapters" size="small">全选</el-button>
+                      <el-button class="chapter-clear-btn" @click="clearAllChapters" size="small">清空</el-button>
+                    </div>
+                  </div>
+                  <span class="config-hint">不选择则从全部题库练习</span>
+                </div>
+                
+                <div class="config-item" v-if="practiceMode === 'sequential'">
+                  <label>打乱选项:</label>
+                  <div class="switch-wrapper">
+                    <el-switch v-model="config.shuffleOptions" />
+                    <span class="switch-label">{{ config.shuffleOptions ? '已启用' : '已禁用' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="config-card">
+              <div class="config-card-header">
+                <el-icon><Document /></el-icon>
+                <span>题目预览</span>
+              </div>
+              <div class="config-card-body">
+                <div class="preview-stat">
+                  <span class="preview-label">总题数:</span>
+                  <span class="preview-value">{{ selectedChapterQuestionCount }}</span>
+                </div>
+                <div class="preview-stat" v-if="config.chapterIds.length > 0">
+                  <span class="preview-label">已选章节:</span>
+                  <span class="preview-value">{{ config.chapterIds.length }}</span>
+                </div>
+                <div class="chapter-previews" v-if="config.chapterIds.length > 0">
+                  <div v-for="chapterId in config.chapterIds" :key="chapterId" class="chapter-preview">
+                    <span class="chapter-name">{{ getChapterName(chapterId) }}</span>
+                    <span class="chapter-count">{{ getChapterQuestionCount(chapterId) }} 题</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -286,7 +340,7 @@
           <div class="answer-display" v-if="showAnswer || practiceMode === 'memorize'">
             <div class="answer-result">
               <span class="answer-label">正确答案:</span>
-              <span class="answer-text">{{ currentQuestion?.answer }}</span>
+              <span class="answer-text">{{ getDisplayAnswer() }}</span>
             </div>
 
             <div v-if="isExplanationEdit" class="edit-mode">
@@ -386,16 +440,32 @@ const getChapterName = (chapterId) => {
   return chapter ? chapter.name : `章节${chapterId}`
 }
 
+const getChapterQuestionCount = (chapterId) => {
+  const chapter = chapters.value.find(ch => ch.id === chapterId)
+  return chapter?.question_count || 0
+}
+
 const questions = ref([])
 const currentIndex = ref(0)
 const practiceStarted = ref(false)
 const showAnswer = ref(false)
 const lastAnswerCorrect = ref(false)
+const lastCorrectAnswer = ref('')
 const answeredQuestions = ref({})
 const isFavorite = ref(false)
 const isInWrongBookMap = ref({})
 const wrongCount = ref(0)
 const totalQuestions = ref(0)
+
+const selectedChapterQuestionCount = computed(() => {
+  if (config.chapterIds.length === 0) {
+    return totalQuestions.value
+  }
+  return config.chapterIds.reduce((sum, chapterId) => {
+    const chapter = chapters.value.find(ch => ch.id === chapterId)
+    return sum + (chapter?.question_count || 0)
+  }, 0)
+})
 
 const isEditMode = ref(false)
 const isExplanationEdit = ref(false)
@@ -696,12 +766,19 @@ const displayOptions = computed(() => {
   }).filter(opt => opt.content)
 })
 
+const getDisplayAnswer = () => {
+  if (!currentQuestion.value) return ''
+  if (lastCorrectAnswer.value) return lastCorrectAnswer.value
+  return currentQuestion.value?.answer || ''
+}
+
 const isSelected = (label) => {
   return answeredQuestions.value[currentIndex.value] === label
 }
 
 const isCorrectAnswer = (label) => {
-  const answer = currentQuestion.value?.answer || currentQuestion.value?.shuffled_answer || ''
+  const q = currentQuestion.value
+  const answer = q?.shuffled_options ? (q?.shuffled_answer || '') : (q?.answer || '')
   return answer.toUpperCase().includes(label.toUpperCase())
 }
 
@@ -709,7 +786,8 @@ const isWrong = (idx) => {
   if (answeredQuestions.value[idx] === undefined) return false
   const q = questions.value[idx]
   const answer = answeredQuestions.value[idx]
-  return !q?.answer?.toUpperCase().includes(answer?.toUpperCase())
+  const correctAnswer = q?.shuffled_options ? (q?.shuffled_answer || '') : (q?.answer || '')
+  return !correctAnswer.toUpperCase().includes(answer?.toUpperCase())
 }
 
 const isMastered = computed(() => {
@@ -723,9 +801,11 @@ const selectOption = async (label) => {
   showAnswer.value = true
 
   const questionId = currentQuestion.value.id
+  const expectedAnswer = currentQuestion.value?.shuffled_options ? currentQuestion.value?.shuffled_answer : null
   try {
-    const result = await store.submitAnswer(questionId, label)
+    const result = await store.submitAnswer(questionId, label, expectedAnswer)
     lastAnswerCorrect.value = result.is_correct
+    lastCorrectAnswer.value = result.correct_answer || ''
 
     if (!result.is_correct) {
       isInWrongBookMap.value[questionId] = true
@@ -756,6 +836,7 @@ const goToQuestion = (index) => {
 
 const resetQuestionState = () => {
   showAnswer.value = answeredQuestions.value[currentIndex.value] !== undefined
+  lastCorrectAnswer.value = ''
   checkFavorite()
 }
 
@@ -779,7 +860,8 @@ const startPractice = async () => {
       questions.value = result.data
     } else if (practiceMode.value === 'sequential') {
       result = await store.practiceSequential({
-        chapter_ids: config.chapterIds
+        chapter_ids: config.chapterIds,
+        shuffle_options: config.shuffleOptions
       })
       questions.value = result.data
     } else if (practiceMode.value === 'random') {
@@ -793,39 +875,61 @@ const startPractice = async () => {
       })
       questions.value = result.data
     } else if (practiceMode.value === 'wrong') {
+      const modeParam = route.query.mode
+      const sessionIdParam = route.query.sessionId
       const chaptersParam = route.query.chapters
       const shuffleOptionsParam = route.query.shuffle_options
       const useShuffleOptions = shuffleOptionsParam === 'true' ? true : (shuffleOptionsParam === 'false' ? false : config.shuffleOptions)
-      
-      let apiParams = {
-        user_id: store.userId,
-        shuffle: true,
-        shuffle_options: useShuffleOptions
-      }
-      
-      if (chaptersParam) {
-        const chapterIds = chaptersParam.split(',').map(id => parseInt(id))
-        console.log('DEBUG: Using route chapter selection:', chapterIds)
-        apiParams.chapter_ids = chapterIds
-      } else if (config.chapterIds.length > 0) {
-        const chapterIds = config.chapterIds.map(id => parseInt(id))
-        console.log('DEBUG: Using config chapter selection:', chapterIds)
-        apiParams.chapter_ids = chapterIds
+
+      if (modeParam === 'wrong_selected' && sessionIdParam) {
+        console.log('DEBUG: Loading pre-selected wrong questions with session:', sessionIdParam)
+        const wrongIds = route.query.wrongIds ? JSON.parse(route.query.wrongIds) : []
+        if (wrongIds.length > 0) {
+          const res = await axios.post('/api/wrong-questions/practice', {
+            user_id: store.userId,
+            shuffle: false,
+            wrong_ids: wrongIds
+          })
+          questions.value = res.data.data || []
+        } else {
+          questions.value = store.questions || []
+        }
+        totalQuestions.value = questions.value.length
+        practiceStarted.value = true
+        showAnswer.value = false
+        await checkFavorite()
+        return
       } else {
-        console.log('DEBUG: Loading all wrong questions')
+        let apiParams = {
+          user_id: store.userId,
+          shuffle: true,
+          shuffle_options: useShuffleOptions
+        }
+
+        if (chaptersParam) {
+          const chapterIds = chaptersParam.split(',').map(id => parseInt(id))
+          console.log('DEBUG: Using route chapter selection:', chapterIds)
+          apiParams.chapter_ids = chapterIds
+        } else if (config.chapterIds.length > 0) {
+          const chapterIds = config.chapterIds.map(id => parseInt(id))
+          console.log('DEBUG: Using config chapter selection:', chapterIds)
+          apiParams.chapter_ids = chapterIds
+        } else {
+          console.log('DEBUG: Loading all wrong questions')
+        }
+
+        console.log('DEBUG: API params:', apiParams)
+        result = await fetch('/api/wrong-questions/practice', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(apiParams)
+        }).then(res => res.json())
+
+        console.log('DEBUG: Practice result:', result)
+        questions.value = result.data || []
       }
-      
-      console.log('DEBUG: API params:', apiParams)
-      result = await fetch('/api/wrong-questions/practice', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(apiParams)
-      }).then(res => res.json())
-      
-      console.log('DEBUG: Practice result:', result)
-      questions.value = result.data || []
     }
 
     practiceStarted.value = true
@@ -906,16 +1010,158 @@ const toggleMastered = () => {
 }
 
 const finishPractice = () => {
+  const totalQuestions = questions.value.length
+  const answeredCount = Object.keys(answeredQuestions.value).length
   const correctCount = Object.values(answeredQuestions.value).filter((answer, idx) => {
-    return questions.value[idx]?.answer?.toUpperCase() === answer?.toUpperCase()
+    const q = questions.value[idx]
+    const correctAnswer = q?.shuffled_options ? (q?.shuffled_answer || '') : (q?.answer || '')
+    return correctAnswer.toUpperCase().includes(answer?.toUpperCase())
   }).length
+  const wrongCount = answeredCount - correctCount
+  const skippedCount = totalQuestions - answeredCount
+  const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0
+
+  let grade = ''
+  let gradeIcon = ''
+  let gradeColor = ''
+  let gradeBgColor = ''
+  let encouragement = ''
+  let animationClass = ''
+  
+  if (accuracy >= 90) {
+    grade = '优秀'
+    gradeIcon = '🏆'
+    gradeColor = '#10b981'
+    gradeBgColor = 'rgba(16, 185, 129, 0.1)'
+    encouragement = '太棒了！继续保持！你的表现非常出色！🎉'
+    animationClass = 'excellent'
+  } else if (accuracy >= 70) {
+    grade = '良好'
+    gradeIcon = '👍'
+    gradeColor = '#3b82f6'
+    gradeBgColor = 'rgba(59, 130, 246, 0.1)'
+    encouragement = '表现不错！再接再厉，你可以做得更好！💪'
+    animationClass = 'good'
+  } else if (accuracy >= 60) {
+    grade = '及格'
+    gradeIcon = '📚'
+    gradeColor = '#f59e0b'
+    gradeBgColor = 'rgba(245, 158, 11, 0.1)'
+    encouragement = '还需要多加练习！建议复习后再尝试！📖'
+    animationClass = 'pass'
+  } else {
+    grade = '需努力'
+    gradeIcon = '💪'
+    gradeColor = '#ef4444'
+    gradeBgColor = 'rgba(239, 68, 68, 0.1)'
+    encouragement = '加油！不要气馁，继续努力你一定能行！✨'
+    animationClass = 'fail'
+  }
+
+  const modeNames = {
+    memorize: '背题模式',
+    sequential: '顺序刷题',
+    random: '随机出题',
+    wrong: '错题练习'
+  }
+
+  const modeColors = {
+    memorize: '#8b5cf6',
+    sequential: '#06b6d4',
+    random: '#f59e0b',
+    wrong: '#ef4444'
+  }
+
+  const resultHTML = `
+    <div class="result-dialog" style="font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; width: 100%; margin: 0; padding: 0;">
+      <div class="result-header" style="background: linear-gradient(135deg, ${modeColors[practiceMode.value] || '#667eea'} 0%, ${modeColors[practiceMode.value] || '#667eea'}dd 100%); padding: 28px 24px; text-align: center;">
+        <div class="result-icon" style="font-size: 52px; margin-bottom: 10px; animation: bounce 1s ease infinite;">${gradeIcon}</div>
+        <div style="color: white; font-size: 14px; opacity: 0.9; font-weight: 600;">练习完成</div>
+      </div>
+      
+      <div style="padding: 28px 24px; background: white; width: 100%; box-sizing: border-box;">
+        <div style="text-align: center; margin-bottom: 28px;">
+          <div class="accuracy-display" style="position: relative; display: inline-block;">
+            <svg width="140" height="140" style="transform: rotate(-90deg);">
+              <circle cx="70" cy="70" r="60" stroke="#e5e7eb" stroke-width="10" fill="none"/>
+              <circle cx="70" cy="70" r="60" stroke="${gradeColor}" stroke-width="10" fill="none"
+                stroke-dasharray="${2 * Math.PI * 60}" 
+                stroke-dashoffset="${2 * Math.PI * 60 * (1 - accuracy / 100)}"
+                style="transition: stroke-dashoffset 1s ease-out; stroke-linecap: round;"/>
+            </svg>
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+              <div style="font-size: 36px; font-weight: 800; color: ${gradeColor}; line-height: 1;">${accuracy}%</div>
+              <div style="font-size: 14px; color: #6b7280; margin-top: 4px;">正确率</div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="grade-badge" style="display: inline-block; background: ${gradeBgColor}; color: ${gradeColor}; padding: 10px 28px; border-radius: 50px; font-size: 18px; font-weight: 700; margin: 0 auto 24px; display: block; text-align: center; width: fit-content;">
+          ${grade}
+        </div>
+        
+        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 24px;">
+          <div class="stat-card" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); padding: 14px 10px; border-radius: 10px; text-align: center; border: 1px solid #bae6fd;">
+            <div style="font-size: 22px; font-weight: 700; color: #4f46e5; margin-bottom: 4px;">${totalQuestions}</div>
+            <div style="font-size: 11px; color: #6b7280; font-weight: 500;">总题数</div>
+          </div>
+          <div class="stat-card" style="background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); padding: 14px 10px; border-radius: 10px; text-align: center; border: 1px solid #86efac;">
+            <div style="font-size: 22px; font-weight: 700; color: #10b981; margin-bottom: 4px;">${correctCount}</div>
+            <div style="font-size: 11px; color: #6b7280; font-weight: 500;">正确</div>
+          </div>
+          <div class="stat-card" style="background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%); padding: 14px 10px; border-radius: 10px; text-align: center; border: 1px solid #fca5a5;">
+            <div style="font-size: 22px; font-weight: 700; color: #ef4444; margin-bottom: 4px;">${wrongCount}</div>
+            <div style="font-size: 11px; color: #6b7280; font-weight: 500;">错误</div>
+          </div>
+          <div class="stat-card" style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); padding: 14px 10px; border-radius: 10px; text-align: center; border: 1px solid #fcd34d;">
+            <div style="font-size: 22px; font-weight: 700; color: #f59e0b; margin-bottom: 4px;">${skippedCount}</div>
+            <div style="font-size: 11px; color: #6b7280; font-weight: 500;">跳过</div>
+          </div>
+        </div>
+        
+        <div class="tip-card" style="background: linear-gradient(135deg, ${gradeBgColor} 0%, rgba(255,255,255,0.9) 100%); border-left: 4px solid ${gradeColor}; border-radius: 10px; padding: 14px 18px; margin-bottom: 24px;">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+            <span style="font-size: 18px;">💡</span>
+            <span style="font-size: 14px; font-weight: 600; color: ${gradeColor};">温馨提示</span>
+          </div>
+          <div style="font-size: 14px; color: #4b5563; line-height: 1.7;">${encouragement}</div>
+        </div>
+        
+        <div class="mode-info" style="background: #f9fafb; border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 20px;">📝</span>
+            <span style="font-size: 14px; font-weight: 600; color: #374151;">练习模式</span>
+          </div>
+          <span style="font-size: 14px; font-weight: 700; color: ${modeColors[practiceMode.value] || '#667eea'};">${modeNames[practiceMode.value] || '练习'}</span>
+        </div>
+      </div>
+    </div>
+    
+    <style>
+      @keyframes bounce {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-8px); }
+      }
+      .result-dialog .stat-card {
+        transition: all 0.3s ease;
+      }
+      .result-dialog .stat-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      }
+    </style>
+  `
 
   ElMessageBox.alert(
-    `练习完成！<br>正确率: ${correctCount}/${Object.keys(answeredQuestions.value).length}`,
-    '练习结果',
-    { confirmButtonText: '确定', type: 'success', dangerouslyUseHTMLString: true }
+    resultHTML,
+    '',
+    { 
+      confirmButtonText: '🏠 返回首页', 
+      dangerouslyUseHTMLString: true,
+      customClass: 'practice-result-dialog-v2',
+      showMessageIcon: false
+    }
   ).then(() => {
-    // 清除保存的状态
     store.clearSavedPracticeSession(practiceMode.value)
     router.push('/home')
   })
@@ -1071,7 +1317,7 @@ onMounted(async () => {
   try {
     await store.loadChapters()
     chapters.value = store.chapters
-    await store.loadWrongQuestions({ user_id: store.userId })
+    await store.loadWrongQuestions({ user_id: store.userId, per_page: 10000 })
     wrongCount.value = store.wrongQuestions.length
     await store.loadQuestions()
     totalQuestions.value = store.questions.length
@@ -1097,7 +1343,7 @@ onMounted(async () => {
     bindImageClickEvents()
     
     // 如果是从章节选择进入错题练习，自动开始练习
-    if (practiceMode.value === 'wrong' && route.query.chapters) {
+    if (practiceMode.value === 'wrong' && (route.query.chapters || route.query.mode === 'wrong_selected')) {
       await startPractice()
     }
   } catch (error) {
@@ -2644,5 +2890,69 @@ const bindImageClickEvents = () => {
   font-size: 13px !important;
   font-weight: 600;
   border-left: 4px solid #f59e0b;
+}
+</style>
+
+<style>
+.practice-result-dialog-v2 {
+  max-width: 520px !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__header {
+  display: none !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__content {
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__container {
+  padding: 0 !important;
+  display: block !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__status {
+  display: none !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__message {
+  padding: 0 !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__message > p {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__message .el-message-box__content {
+  padding: 0 !important;
+}
+
+.practice-result-dialog-v2 .el-message-box__btns {
+  padding: 20px 24px !important;
+  border-top: none !important;
+  background: white !important;
+}
+
+.practice-result-dialog-v2 .el-button--primary {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  padding: 14px 36px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3) !important;
+  width: 100% !important;
+  transition: all 0.3s ease !important;
+}
+
+.practice-result-dialog-v2 .el-button--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4) !important;
+  background: linear-gradient(135deg, #7c8ff5 0%, #8a5db8 100%) !important;
 }
 </style>

@@ -211,6 +211,21 @@ export const useQuizStore = defineStore('quiz', {
       return res.data
     },
 
+    async practiceWrongQuestionsByIds(data) {
+      const res = await api.post('/wrong-questions/practice', {
+        user_id: this.userId,
+        shuffle: data.shuffle,
+        wrong_ids: data.wrong_ids
+      })
+      this.currentSession = {
+        id: res.data.session_id,
+        type: 'wrong_questions_by_ids',
+        wrong_ids: data.wrong_ids
+      }
+      this.questions = res.data.data || []
+      return res.data
+    },
+
     async loadFavorites(params = {}) {
       params.user_id = this.userId
       const res = await api.get('/favorites', { params })
@@ -236,14 +251,18 @@ export const useQuizStore = defineStore('quiz', {
       return res.data.is_favorite
     },
 
-    async submitAnswer(questionId, userAnswer) {
+    async submitAnswer(questionId, userAnswer, expectedAnswer = null) {
       const session_id = typeof this.currentSession === 'object' ? this.currentSession.id : this.currentSession
-      const res = await api.post('/answers', {
+      const payload = {
         session_id: session_id || this.userId,
         question_id: questionId,
         answer: userAnswer,
         user_id: this.userId
-      })
+      }
+      if (expectedAnswer != null) {
+        payload.expected_answer = expectedAnswer
+      }
+      const res = await api.post('/answers', payload)
       return res.data.data
     },
 
