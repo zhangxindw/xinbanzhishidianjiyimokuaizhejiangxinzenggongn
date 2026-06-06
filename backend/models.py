@@ -240,3 +240,166 @@ class OperationLog(db.Model):
             'details': self.details,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+# ========== 知识点记忆模块模型 ==========
+
+class KnowledgePoint(db.Model):
+    """知识点主体"""
+    __tablename__ = 'knowledge_points'
+
+    id = db.Column(db.Integer, primary_key=True)
+    question = db.Column(db.Text, nullable=False)  # 问题（题干）
+    question_html = db.Column(db.Text, nullable=True)  # 题干HTML版本（含格式）
+    priority = db.Column(db.String(20), nullable=False, default='normal')  # 标识：must（必须背）、important（重点背）、normal（尽量背）
+    mnemonic = db.Column(db.String(200), nullable=True)  # 速记口诀
+    chapter_id = db.Column(db.Integer, db.ForeignKey('chapters.id'), nullable=True)
+    status = db.Column(db.String(20), default='active')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 兼容旧数据的字段（数据库中这些列是 NOT NULL，所以设置默认值）
+    tag = db.Column(db.String(20), nullable=False, default='')
+    answer = db.Column(db.Text, nullable=False, default='')
+    answer_html = db.Column(db.Text, nullable=True)
+    order_num = db.Column(db.Integer, nullable=True)
+
+    chapter = db.relationship('Chapter', backref=db.backref('knowledge_points', lazy='dynamic'))
+    items = db.relationship('KnowledgePointItem', backref='knowledge_point', lazy='dynamic', cascade='all, delete-orphan')
+    relations = db.relationship('KnowledgePointRelation', foreign_keys='KnowledgePointRelation.source_id', backref='source', lazy='dynamic')
+    memory_records = db.relationship('MemoryRecord', backref='knowledge_point', lazy='dynamic')
+
+    def to_dict(self):
+        # 获取 items
+        items_list = self.items.order_by(KnowledgePointItem.order).all()
+        
+        # 如果没有 items 但有旧的 answer 字段，就从 answer 中解析
+        if not items_list and self.answer:
+            # 简单地按行分割 answer
+            lines = [line.strip() for line in self.answer.split('\n') if line.strip()]
+            # 创建临时的 item 对象
+            items_data = []
+            for i, line in enumerate(lines):
+                items_data.append({
+                    'id': i + 1,
+                    'content': line,
+                    'content_html': line,
+                    'order': i,
+                    'blank_positions': None
+                })
+        else:
+            items_data = [item.to_dict() for item in items_list]
+        
+        return {
+            'id': self.id,
+            'question': self.question,
+            'question_html': self.question_html if self.question_html else self.question,
+            'priority': self.priority,
+            'priority_label': self.get_priority_label(),
+            'mnemonic': self.mnemonic,
+            'chapter_id': self.chapter_id,
+            'chapter_name': self.chapter.name if self.chapter else None,
+            'status': self.status,
+            'items': items_data,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+    def get_priority_label(self):
+        labels = {
+            'must': '[必须背]',
+            'important': '[重点背]',
+            'normal': '[尽量背]'
+        }
+        return labels.get(self.priority, '[尽量背]')
+
+class KnowledgePointItem(db.Model):
+    """知识点答案条目"""
+    __tablename__ = 'knowledge_point_items'
+
+    id = db.Column(db.Integer, primary_key=True)
+    knowledge_point_id = db.Column(db.Integer, db.ForeignKey('knowledge_points.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)  # 答案内容
+    content_html = db.Column(db.Text, nullable=True)  # HTML版本
+    order = db.Column(db.Integer, default=0)  # 排序
+    blank_positions = db.Column(db.Text, nullable=True)  # 挖空位置，JSON格式：[{start: 0, end: 5}, ...]
+
+    def to_dict(self):
+        # 获取该条目的关联知识点
+        relations = []
+        for rel in KnowledgePointRelation.query.filter_by(source_item_id=self.id).all():
+            target_kp = KnowledgePoint.query.get(rel.target_kp_id)
+            if target_kp:
+                relations.append({
+                    'id': target_kp.id,
+                    'question': target_kp.question
+                })
+        
+        return {
+            'id': self.id,
+            'knowledge_point_id': self.knowledge_point_id,
+            'content': self.content,
+            'content_html': self.content_html,
+            'order': self.order,
+            'blank_positions': self.blank_positions,
+            'relations': relations
+        }
+
+class KnowledgePointRelation(db.Model):
+    """知识点关联关系"""
+    __tablename__ = 'knowledge_point_relations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_id = db.Column(db.Integer, db.ForeignKey('knowledge_points.id'), nullable=True)  # 兼容旧数据
+    source_item_id = db.Column(db.Integer, db.ForeignKey('knowledge_point_items.id'), nullable=True)  # 条目级别的关联
+    target_id = db.Column(db.Integer, db.ForeignKey('knowledge_points.id'), nullable=True)  # 兼容旧数据
+    target_kp_id = db.Column(db.Integer, db.ForeignKey('knowledge_points.id'), nullable=True)  # 新字段
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    target = db.relationship('KnowledgePoint', foreign_keys=[target_id])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'source_id': self.source_id,
+            'source_item_id': self.source_item_id,
+            'target_id': self.target_id or self.target_kp_id,
+            'target_question': self.target.question if self.target else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class MemoryRecord(db.Model):
+    """记忆记录（用于艾宾浩斯遗忘曲线）"""
+    __tablename__ = 'memory_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(50), nullable=False, default='default_user')
+    knowledge_point_id = db.Column(db.Integer, db.ForeignKey('knowledge_points.id'), nullable=False)
+    result = db.Column(db.String(10), nullable=False, default='')  # 兼容旧数据库列
+    status = db.Column(db.String(20), default='learning')  # learning（初学中）、reviewing（复习中）
+    consecutive_correct = db.Column(db.Integer, default=0)  # 连续背出次数
+    interval_days = db.Column(db.Integer, default=1)  # 当前间隔天数
+    next_review_date = db.Column(db.Date, nullable=False)  # 下次复习日期
+    last_review_date = db.Column(db.Date, nullable=True)  # 上次复习日期
+    review_count = db.Column(db.Integer, default=0)  # 总复习次数
+    # 初学中状态专用字段
+    learning_repetition = db.Column(db.Integer, default=0)  # 初学循环中还剩多少个题目后出现（0表示立即出现）
+    today_consecutive_count = db.Column(db.Integer, default=0)  # 当天连续"背出了"次数
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'knowledge_point_id': self.knowledge_point_id,
+            'status': self.status,
+            'consecutive_correct': self.consecutive_correct,
+            'interval_days': self.interval_days,
+            'next_review_date': self.next_review_date.isoformat() if self.next_review_date else None,
+            'last_review_date': self.last_review_date.isoformat() if self.last_review_date else None,
+            'review_count': self.review_count,
+            'learning_repetition': self.learning_repetition,
+            'today_consecutive_count': self.today_consecutive_count,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }

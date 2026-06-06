@@ -1,11 +1,11 @@
 import os
 import uuid
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-from models import db, Question, Chapter, QuestionType, WrongQuestion, FavoriteQuestion, UserAnswer, UserPreference, OperationLog
+from models import db, Question, Chapter, QuestionType, WrongQuestion, FavoriteQuestion, UserAnswer, UserPreference, OperationLog, KnowledgePoint, KnowledgePointItem, KnowledgePointRelation, MemoryRecord
 from openpyxl import load_workbook, Workbook
 
 app = Flask(__name__)
@@ -20,6 +20,15 @@ db.init_app(app)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# 全局错误处理器
+@app.errorhandler(Exception)
+def handle_exception(e):
+    import traceback
+    error_trace = traceback.format_exc()
+    print(f"全局异常捕获: {e}")
+    print(f"错误堆栈: {error_trace}")
+    return jsonify({'status': 'error', 'message': str(e), 'trace': error_trace}), 500
+
 def log_operation(user_id, action, target_type=None, target_id=None, details=None):
     log = OperationLog(
         user_id=user_id,
@@ -33,6 +42,62 @@ def log_operation(user_id, action, target_type=None, target_id=None, details=Non
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['xls', 'xlsx']
+
+def to_html(value):
+    """将文本转换为HTML，允许安全的HTML标签"""
+    if not value:
+        return ''
+    s = str(value)
+    
+    import re
+    
+    # 允许的标签列表（不区分大小写）
+    allowed_tags = ['img', 'br', 'p', 'div', 'span', 'strong', 'em', 
+                   'b', 'i', 'u', 'ul', 'ol', 'li', 'table', 'tr', 
+                   'td', 'th', 'tbody', 'thead', 'h1', 'h2', 'h3', 
+                   'h4', 'h5', 'h6', 'a', 'pre', 'code', 'hr', 'sub', 'sup', 'mark']
+    
+    # 分两步处理：先标记允许的标签，再转义其他字符
+    placeholder_map = {}
+    placeholder_counter = 0
+    
+    # 匹配标签的正则表达式
+    tag_regex = re.compile(r'</?(\w+)[^>]*>', re.IGNORECASE)
+    
+    def tag_replacer(match):
+        nonlocal placeholder_counter
+        tag = match.group(1).lower()
+        if tag in allowed_tags:
+            placeholder = f'__SAFE_TAG_{placeholder_counter}__'
+            placeholder_map[placeholder] = match.group(0)
+            placeholder_counter += 1
+            return placeholder
+        else:
+            # 非允许标签则转义
+            return f'&lt;{match.group(0)[1:-1]}&gt;'
+    
+    # 替换所有标签为占位符
+    s = tag_regex.sub(tag_replacer, s)
+    
+    # 转义其他HTML特殊字符
+    s = s.replace('&', '&amp;').replace('"', '&quot;').replace("'", '&#39;')
+    
+    # 处理格式标记（在转义后处理）
+    # **加粗** → <strong>加粗</strong>
+    s = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
+    # __下划线__ → <u>下划线</u>
+    s = re.sub(r'__(.+?)__', r'<u>\1</u>', s)
+    # ==高亮== → <mark>高亮</mark>
+    s = re.sub(r'==(.+?)==', r'<mark style="background-color: #ffff00;">\1</mark>', s)
+    
+    # 处理换行符
+    s = s.replace('\n', '<br>')
+    
+    # 恢复安全标签
+    for placeholder, original_tag in placeholder_map.items():
+        s = s.replace(placeholder, original_tag)
+    
+    return s
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -1167,7 +1232,719 @@ def get_operation_logs():
         'pages': pagination.pages
     })
 
+# ========== 知识点记忆模块 API ==========
+
+# 知识点列表
+@app.route('/api/knowledge-points', methods=['GET', 'POST'])
+def handle_knowledge_points():
+    if request.method == 'GET':
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 20, type=int)
+        chapter_id = request.args.get('chapter_id', type=int)
+        chapter_ids = request.args.getlist('chapter_ids', type=int)  # 支持多章节筛选
+        priority = request.args.get('priority')
+        keyword = request.args.get('keyword')
+        user_id = request.args.get('user_id', 'default_user')
+
+        # 兼容旧数据：查询 status 为 'active' 或 'published' 的知识点
+        query = KnowledgePoint.query.filter(KnowledgePoint.status.in_(['active', 'published']))
+        
+        if chapter_id:
+            query = query.filter_by(chapter_id=chapter_id)
+        elif chapter_ids:  # 支持多章节筛选
+            query = query.filter(KnowledgePoint.chapter_id.in_(chapter_ids))
+        if priority:
+            query = query.filter_by(priority=priority)
+        if keyword:
+            query = query.filter(KnowledgePoint.question.like('%' + keyword + '%'))
+
+        pagination = query.order_by(KnowledgePoint.chapter_id, KnowledgePoint.created_at).paginate(
+            page=page, per_page=per_page, error_out=False
+        )
+        
+        # 获取用户的记忆记录
+        memory_records = {mr.knowledge_point_id: mr for mr in MemoryRecord.query.filter_by(user_id=user_id).all()}
+        
+        result = []
+        for kp in pagination.items:
+            kp_dict = kp.to_dict()
+            # 添加是否加入规划和下一次复习时间
+            if kp.id in memory_records:
+                mr = memory_records[kp.id]
+                kp_dict['in_plan'] = True
+                kp_dict['next_review'] = mr.next_review_date.isoformat() if mr.next_review_date else None
+            else:
+                kp_dict['in_plan'] = False
+                kp_dict['next_review'] = None
+            result.append(kp_dict)
+        
+        return jsonify({
+            'status': 'ok',
+            'data': result,
+            'total': pagination.total,
+            'page': page,
+            'per_page': per_page,
+            'pages': pagination.pages
+        })
+    else:
+        try:
+            print(f"=== 收到 POST 请求 ===")
+            print(f"请求方法: {request.method}")
+            print(f"Content-Type: {request.headers.get('Content-Type')}")
+            print(f"request.json: {request.json}")
+            print(f"request.data: {request.data}")
+            
+            if request.json is None:
+                print("ERROR: request.json is None!")
+                return jsonify({'status': 'error', 'message': '无法解析请求体'}), 400
+                
+            data = request.json
+            question = data.get('question', '')
+            priority = data.get('priority', 'normal')
+            mnemonic = data.get('mnemonic', '')
+            chapter_id = data.get('chapter_id')
+            items = data.get('items', [])
+            print(f"解析参数: question={question}, priority={priority}, chapter_id={chapter_id}, items={items}")
+
+            # 处理 chapter_id：如果是空字符串，设为 None
+            if chapter_id == '':
+                chapter_id = None
+
+            kp = KnowledgePoint(
+                question=question,
+                question_html=to_html(question),
+                priority=priority,
+                mnemonic=mnemonic,
+                chapter_id=chapter_id
+            )
+            db.session.add(kp)
+            db.session.flush()
+
+            for idx, item in enumerate(items):
+                kp_item = KnowledgePointItem(
+                    knowledge_point_id=kp.id,
+                    content=item.get('content', ''),
+                    content_html=to_html(item.get('content', '')),
+                    order=idx,
+                    blank_positions=item.get('blank_positions')
+                )
+                db.session.add(kp_item)
+                db.session.flush()  # 获取 kp_item.id
+                
+                # 处理关联
+                relations = item.get('relations', [])
+                for target_id in relations:
+                    if target_id != kp.id:  # 不能关联自己
+                        relation = KnowledgePointRelation(
+                            source_item_id=kp_item.id,
+                            target_kp_id=target_id
+                        )
+                        db.session.add(relation)
+
+            db.session.commit()
+            return jsonify({'status': 'ok', 'data': kp.to_dict()})
+        except Exception as e:
+            db.session.rollback()
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"创建知识点失败: {str(e)}")
+            print(f"错误堆栈: {error_trace}")
+            return jsonify({'status': 'error', 'message': str(e), 'trace': error_trace}), 500
+
+# 知识点详情
+@app.route('/api/knowledge-points/<int:kp_id>', methods=['GET', 'PUT', 'DELETE'])
+def handle_knowledge_point(kp_id):
+    kp = KnowledgePoint.query.get_or_404(kp_id)
+    
+    if request.method == 'GET':
+        return jsonify({'status': 'ok', 'data': kp.to_dict()})
+    elif request.method == 'PUT':
+        data = request.json
+        kp.question = data.get('question', kp.question)
+        # 如果前端发送了 question_html，直接使用；否则从 question 计算
+        if 'question_html' in data:
+            kp.question_html = data['question_html']
+        else:
+            kp.question_html = to_html(kp.question)
+        kp.priority = data.get('priority', kp.priority)
+        kp.mnemonic = data.get('mnemonic', kp.mnemonic)
+        chapter_id = data.get('chapter_id', kp.chapter_id)
+        if chapter_id == '':
+            chapter_id = None
+        kp.chapter_id = chapter_id
+        
+        # 更新条目（只有当items数组有内容时才处理）
+        items = data.get('items', [])
+        updated_ids = set()
+        
+        if items:  # 只有当items有内容时才处理
+            existing_items = {item.id: item for item in kp.items.all()}
+            
+            for idx, item in enumerate(items):
+                if item.get('id') and item['id'] in existing_items:
+                    # 更新现有条目
+                    existing = existing_items[item['id']]
+                    existing.content = item.get('content', existing.content)
+                    # 如果前端发送了 content_html，直接使用；否则从 content 计算
+                    if 'content_html' in item:
+                        existing.content_html = item['content_html']
+                    else:
+                        existing.content_html = to_html(existing.content)
+                    existing.order = idx
+                    existing.blank_positions = item.get('blank_positions', existing.blank_positions)
+                    updated_ids.add(item['id'])
+                    
+                    # 更新关联：先删除旧的关联
+                    KnowledgePointRelation.query.filter_by(source_item_id=existing.id).delete()
+                    # 添加新的关联
+                    relations = item.get('relations', [])
+                    for target_id in relations:
+                        if target_id != kp.id:
+                            relation = KnowledgePointRelation(
+                                source_item_id=existing.id,
+                                target_kp_id=target_id
+                            )
+                            db.session.add(relation)
+                else:
+                    # 创建新条目
+                    kp_item = KnowledgePointItem(
+                        knowledge_point_id=kp.id,
+                        content=item.get('content', ''),
+                        content_html=to_html(item.get('content', '')),
+                        order=idx,
+                        blank_positions=item.get('blank_positions')
+                    )
+                    db.session.add(kp_item)
+                    db.session.flush()
+                    
+                    # 添加关联
+                    relations = item.get('relations', [])
+                    for target_id in relations:
+                        if target_id != kp.id:
+                            relation = KnowledgePointRelation(
+                                source_item_id=kp_item.id,
+                                target_kp_id=target_id
+                            )
+                            db.session.add(relation)
+            
+            # 删除不在新列表中的旧条目
+            for item_id, item in existing_items.items():
+                if item_id not in updated_ids:
+                    db.session.delete(item)
+        
+        db.session.commit()
+        return jsonify({'status': 'ok', 'data': kp.to_dict()})
+    else:
+        # 先删除所有关联关系
+        KnowledgePointRelation.query.filter_by(source_id=kp_id).delete()
+        KnowledgePointRelation.query.filter_by(target_id=kp_id).delete()
+        # 删除记忆记录
+        MemoryRecord.query.filter_by(knowledge_point_id=kp_id).delete()
+        # 删除知识点
+        db.session.delete(kp)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'message': 'Knowledge point deleted'})
+
+# 批量删除知识点
+@app.route('/api/knowledge-points/batch', methods=['DELETE'])
+def batch_delete_knowledge_points():
+    """批量删除知识点"""
+    data = request.json
+    ids = data.get('ids', [])
+    
+    if not ids:
+        return jsonify({'status': 'error', 'message': 'No IDs provided'}), 400
+    
+    try:
+        # 批量删除知识点及其关联数据
+        for kp_id in ids:
+            kp = KnowledgePoint.query.get(kp_id)
+            if kp:
+                # 删除所有关联关系
+                KnowledgePointRelation.query.filter_by(source_id=kp_id).delete()
+                KnowledgePointRelation.query.filter_by(target_id=kp_id).delete()
+                # 删除记忆记录
+                MemoryRecord.query.filter_by(knowledge_point_id=kp_id).delete()
+                # 删除知识点（会级联删除条目）
+                db.session.delete(kp)
+        
+        db.session.commit()
+        return jsonify({'status': 'ok', 'message': f'成功删除 {len(ids)} 个知识点'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# 获取条目的关联信息
+@app.route('/api/knowledge-point-items/<int:item_id>/relations', methods=['GET'])
+def get_item_relations(item_id):
+    relations = KnowledgePointRelation.query.filter_by(source_item_id=item_id).all()
+    result = []
+    for rel in relations:
+        target_kp = KnowledgePoint.query.get(rel.target_kp_id)
+        if target_kp:
+            result.append({
+                'id': target_kp.id,
+                'question': target_kp.question
+            })
+    return jsonify({'status': 'ok', 'data': result})
+
+# 更新单个知识点条目
+@app.route('/api/knowledge-points/<int:kp_id>/items/<int:item_index>', methods=['PUT'])
+def update_knowledge_point_item(kp_id, item_index):
+    kp = KnowledgePoint.query.get_or_404(kp_id)
+    items = KnowledgePointItem.query.filter_by(knowledge_point_id=kp_id).order_by(KnowledgePointItem.order).all()
+    
+    if item_index < 0 or item_index >= len(items):
+        return jsonify({'status': 'error', 'message': 'Item index out of range'}), 400
+    
+    item = items[item_index]
+    data = request.json
+    
+    try:
+        if 'content' in data:
+            item.content = data['content']
+            # 如果前端发送了 content_html，直接使用；否则从 content 计算
+            if 'content_html' in data:
+                item.content_html = data['content_html']
+            else:
+                item.content_html = to_html(item.content)
+        
+        db.session.commit()
+        return jsonify({'status': 'ok', 'data': item.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+# 获取知识点关联关系
+@app.route('/api/knowledge-points/<int:kp_id>/relations', methods=['GET', 'POST'])
+def handle_kp_relations(kp_id):
+    if request.method == 'GET':
+        relations = KnowledgePointRelation.query.filter_by(source_id=kp_id).all()
+        return jsonify({'status': 'ok', 'data': [r.to_dict() for r in relations]})
+    else:
+        data = request.json
+        target_id = data.get('target_id')
+        
+        # 检查是否已存在关联
+        existing = KnowledgePointRelation.query.filter_by(source_id=kp_id, target_id=target_id).first()
+        if existing:
+            return jsonify({'status': 'error', 'message': 'Relation already exists'}), 400
+        
+        relation = KnowledgePointRelation(source_id=kp_id, target_id=target_id)
+        db.session.add(relation)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'data': relation.to_dict()})
+
+# 删除知识点关联
+@app.route('/api/knowledge-point-relations/<int:relation_id>', methods=['DELETE'])
+def delete_kp_relation(relation_id):
+    relation = KnowledgePointRelation.query.get_or_404(relation_id)
+    db.session.delete(relation)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'message': 'Relation deleted'})
+
+# 删除记忆记录（移出记忆规划）
+@app.route('/api/memory-record/<int:kp_id>', methods=['DELETE'])
+def delete_memory_record(kp_id):
+    """从记忆规划中删除指定知识点"""
+    user_id = request.args.get('user_id', 'default_user')
+    
+    # 查找记忆记录
+    record = MemoryRecord.query.filter_by(user_id=user_id, knowledge_point_id=kp_id).first()
+    if record:
+        db.session.delete(record)
+        db.session.commit()
+        return jsonify({'status': 'ok', 'message': '记忆记录已删除'})
+    else:
+        return jsonify({'status': 'error', 'message': '未找到记忆记录'}), 404
+
+# 获取记忆记录
+@app.route('/api/memory-records', methods=['GET', 'POST'])
+def handle_memory_records():
+    user_id = request.args.get('user_id', 'default_user')
+    
+    if request.method == 'GET':
+        kp_id = request.args.get('kp_id', type=int)
+        status = request.args.get('status')
+        
+        query = MemoryRecord.query.filter_by(user_id=user_id)
+        if kp_id:
+            query = query.filter_by(knowledge_point_id=kp_id)
+        if status:
+            query = query.filter_by(status=status)
+        
+        records = query.all()
+        return jsonify({'status': 'ok', 'data': [r.to_dict() for r in records]})
+    else:
+        data = request.json
+        kp_ids = data.get('kp_ids', [])
+        
+        for kp_id in kp_ids:
+            existing = MemoryRecord.query.filter_by(user_id=user_id, knowledge_point_id=kp_id).first()
+            if not existing:
+                record = MemoryRecord(
+                    user_id=user_id,
+                    knowledge_point_id=kp_id,
+                    status='learning',
+                    consecutive_correct=0,
+                    interval_days=1,
+                    next_review_date=datetime.now().date(),
+                    learning_repetition=0,  # 新添加的字段
+                    today_consecutive_count=0  # 新添加的字段
+                )
+                db.session.add(record)
+        
+        db.session.commit()
+        return jsonify({'status': 'ok', 'message': 'Memory records created'})
+
+# 获取今日待复习任务
+@app.route('/api/memory/today-tasks', methods=['GET'])
+def get_today_tasks():
+    user_id = request.args.get('user_id', 'default_user')
+    today = datetime.now().date()
+    
+    # 获取今日待复习的知识点
+    # 优先显示所有初学中的记录（初学中都是当天需要完成的）
+    learning_records = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.status == 'learning'
+    ).order_by(MemoryRecord.last_review_date.is_(None), MemoryRecord.last_review_date).all()
+    
+    reviewing_records = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.status == 'reviewing',
+        MemoryRecord.next_review_date <= today
+    ).order_by(MemoryRecord.next_review_date).all()
+    
+    # 合并并优先学习中
+    records = learning_records + reviewing_records
+    
+    # 获取对应的知识点详情
+    kp_ids = [r.knowledge_point_id for r in records]
+    kps = KnowledgePoint.query.filter(KnowledgePoint.id.in_(kp_ids)).all()
+    kp_dict = {kp.id: kp.to_dict() for kp in kps}
+    
+    result = []
+    for record in records:
+        kp = kp_dict.get(record.knowledge_point_id)
+        if kp:
+            item = record.to_dict()
+            item['knowledge_point'] = kp
+            result.append(item)
+    
+    return jsonify({'status': 'ok', 'data': result})
+
+# 记忆反馈（艾宾浩斯曲线核心逻辑）
+@app.route('/api/memory/feedback', methods=['POST'])
+def memory_feedback():
+    """
+    记忆反馈算法（完全按照需求实现）：
+    
+    一、初学中状态：
+       - "背出了"：today_consecutive_count + 1，安排在4个题目之后再次出现
+         → 连续2次"背出了"后，进入复习状态，下次复习为1天后
+       - "模糊"/"背不出"：today_consecutive_count清零，安排在3个题目之后再次出现
+         → 继续循环，直到达成连续2次"背出了"
+    
+    二、复习中状态：
+       - "背出了"：consecutive_correct + 1，间隔前进到下一档位
+         → 档位：1→2→4→7→15→30→60→120...天
+         → 若已达最大档位，按1.5倍缓慢增加，最大365天
+       - "模糊"：consecutive_correct回退1档（最少为1），间隔相应缩短
+       - "背不出"：打回初学状态，重新开始短间隔循环
+    
+    三、下次复习日 = 当前日期 + 新间隔
+    """
+    user_id = request.args.get('user_id', 'default_user')
+    data = request.json
+    kp_id = data.get('kp_id')
+    feedback = data.get('feedback')  # 'remembered', 'fuzzy', 'forgot'
+    
+    record = MemoryRecord.query.filter_by(user_id=user_id, knowledge_point_id=kp_id).first()
+    if not record:
+        return jsonify({'status': 'error', 'message': 'Memory record not found'}), 404
+    
+    today = datetime.now().date()
+    
+    # 复习间隔档位：1, 2, 4, 7, 15, 30, 60, 120, 180, 365
+    intervals = [1, 2, 4, 7, 15, 30, 60, 120, 180, 365]
+    
+    if record.status == 'learning':
+        # ==========================================
+        # 【初学中状态】短间隔循环
+        # ==========================================
+        if feedback == 'remembered':
+            # "背出了"：today_consecutive_count + 1
+            record.today_consecutive_count += 1
+            
+            if record.today_consecutive_count >= 2:
+                # ✓ 连续两次"背出了"，进入复习阶段
+                record.status = 'reviewing'
+                record.consecutive_correct = 1  # 复习阶段从1开始
+                record.interval_days = 1  # 对应1天间隔
+                record.next_review_date = today + timedelta(days=1)
+                record.learning_repetition = 0
+                record.today_consecutive_count = 0  # 重置连续计数
+            else:
+                # 继续初学循环，安排在4个题目之后
+                record.learning_repetition = 4
+                record.next_review_date = today  # 今天内循环
+        else:
+            # "模糊"或"背不出"：today_consecutive_count清零，安排在3个题目之后
+            record.today_consecutive_count = 0
+            record.learning_repetition = 3
+            record.next_review_date = today  # 今天内循环
+            
+    else:
+        # ==========================================
+        # 【复习中状态】间隔复习
+        # ==========================================
+        if feedback == 'remembered':
+            # "背出了"：consecutive_correct + 1，间隔前进
+            record.consecutive_correct += 1
+            
+            if record.consecutive_correct < len(intervals):
+                record.interval_days = intervals[record.consecutive_correct]
+            else:
+                # 已达最大档位，按1.5倍缓慢增加，最大365天
+                record.interval_days = min(int(record.interval_days * 1.5), 365)
+            
+            record.next_review_date = today + timedelta(days=record.interval_days)
+            
+        elif feedback == 'fuzzy':
+            # "模糊"：回退一档（最少保留为1）
+            record.consecutive_correct = max(1, record.consecutive_correct - 1)
+            record.interval_days = intervals[record.consecutive_correct - 1]
+            record.next_review_date = today + timedelta(days=record.interval_days)
+            
+        else:
+            # "背不出"：打回初学状态，重新开始
+            record.status = 'learning'
+            record.consecutive_correct = 0
+            record.interval_days = 1
+            record.next_review_date = today
+            record.learning_repetition = 0  # 立即可以复习
+            record.today_consecutive_count = 0  # 重置连续计数
+    
+    record.last_review_date = today
+    record.review_count += 1
+    
+    db.session.commit()
+    return jsonify({'status': 'ok', 'data': record.to_dict()})
+
+# 更新学习循环进度（练习时调用，每练习一个题目减1）
+@app.route('/api/memory/advance-repetition', methods=['POST'])
+def advance_repetition():
+    """减少一个知识点的learning_repetition计数"""
+    user_id = request.args.get('user_id', 'default_user')
+    data = request.json
+    kp_id = data.get('kp_id')
+    
+    record = MemoryRecord.query.filter_by(user_id=user_id, knowledge_point_id=kp_id).first()
+    if not record:
+        return jsonify({'status': 'error', 'message': 'Memory record not found'}), 404
+    
+    if record.learning_repetition > 0:
+        record.learning_repetition -= 1
+        db.session.commit()
+    
+    return jsonify({'status': 'ok', 'data': record.to_dict()})
+
+# 获取学习统计
+@app.route('/api/memory/statistics', methods=['GET'])
+def get_memory_statistics():
+    user_id = request.args.get('user_id', 'default_user')
+    
+    total_records = MemoryRecord.query.filter_by(user_id=user_id).count()
+    learning_count = MemoryRecord.query.filter_by(user_id=user_id, status='learning').count()
+    reviewing_count = MemoryRecord.query.filter_by(user_id=user_id, status='reviewing').count()
+    
+    today = datetime.now().date()
+    
+    # 今日待复习：初学中所有记录 + 复习中逾期未做的记录
+    # 初学中状态：只要是learning状态，当天都需要复习
+    learning_today = MemoryRecord.query.filter_by(
+        user_id=user_id,
+        status='learning'
+    ).count()
+    
+    # 复习中逾期
+    reviewing_overdue = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.status == 'reviewing',
+        MemoryRecord.next_review_date <= today
+    ).count()
+    
+    today_review_count = learning_today + reviewing_overdue
+    
+    return jsonify({
+        'status': 'ok',
+        'data': {
+            'total_records': total_records,
+            'learning_count': learning_count,
+            'reviewing_count': reviewing_count,
+            'today_review_count': today_review_count
+        }
+    })
+
+# 清空全部记忆规划
+@app.route('/api/memory/clear-all', methods=['DELETE'])
+def clear_all_memory_records():
+    try:
+        user_id = request.args.get('user_id', 'default_user')
+        MemoryRecord.query.filter_by(user_id=user_id).delete()
+        db.session.commit()
+        return jsonify({'status': 'ok', 'message': '清空成功'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# 获取记忆规划预览数据（用于首页和数据统计）
+@app.route('/api/memory/preview', methods=['GET'])
+def get_memory_preview():
+    user_id = request.args.get('user_id', 'default_user')
+    today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
+
+    # 1. 知识点已加入规划总条数
+    total_records = MemoryRecord.query.filter_by(user_id=user_id).count()
+
+    # 2. 今日预计复习条数（初学中全部 + 复习中今天到期）
+    learning_today = MemoryRecord.query.filter_by(
+        user_id=user_id, status='learning'
+    ).count()
+    reviewing_today = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.status == 'reviewing',
+        MemoryRecord.next_review_date <= today
+    ).count()
+    today_review_count = learning_today + reviewing_today
+
+    # 3. 明日预计复习条数
+    learning_tomorrow = MemoryRecord.query.filter_by(
+        user_id=user_id, status='learning'
+    ).count()
+    reviewing_tomorrow = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.status == 'reviewing',
+        MemoryRecord.next_review_date == tomorrow
+    ).count()
+    tomorrow_review_count = learning_tomorrow + reviewing_tomorrow
+
+    # 4. 近15天需要复习的条数（按天分组）
+    next_15_days = []
+    for i in range(1, 16):
+        day = today + timedelta(days=i)
+        learning_count = MemoryRecord.query.filter_by(
+            user_id=user_id, status='learning'
+        ).count()
+        reviewing_count = MemoryRecord.query.filter(
+            MemoryRecord.user_id == user_id,
+            MemoryRecord.status == 'reviewing',
+            MemoryRecord.next_review_date == day
+        ).count()
+        next_15_days.append({
+            'date': day.strftime('%m-%d'),
+            'count': learning_count + reviewing_count
+        })
+
+    return jsonify({
+        'status': 'ok',
+        'data': {
+            'total_records': total_records,
+            'today_review_count': today_review_count,
+            'tomorrow_review_count': tomorrow_review_count,
+            'next_15_days': next_15_days
+        }
+    })
+
+
+# 获取今日需要复习的知识点（用于默写练习）
+@app.route('/api/memory/today-review', methods=['GET'])
+def get_today_review_for_dictation():
+    user_id = request.args.get('user_id', 'default_user')
+    
+    today = datetime.now().date()
+    
+    # 获取所有需要复习的记录
+    # 1. 初学中的记录（learning状态）- 全部返回
+    learning_records = MemoryRecord.query.filter_by(
+        user_id=user_id,
+        status='learning'
+    ).all()
+    
+    # 2. 复习中已到期的记录（下次复习日期 <= 今天）
+    reviewing_records = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.status == 'reviewing',
+        MemoryRecord.next_review_date <= today
+    ).all()
+    
+    # 3. 今天已完成复习的记录（上次复习日期 == 今天）
+    completed_today_records = MemoryRecord.query.filter(
+        MemoryRecord.user_id == user_id,
+        MemoryRecord.last_review_date == today
+    ).all()
+    
+    # 合并并获取知识点详情（去重）
+    kp_ids = []
+    seen_ids = set()
+    for r in learning_records + reviewing_records + completed_today_records:
+        if r.knowledge_point_id not in seen_ids:
+            kp_ids.append(r.knowledge_point_id)
+            seen_ids.add(r.knowledge_point_id)
+    
+    if not kp_ids:
+        return jsonify({'status': 'ok', 'data': []})
+    
+    # 获取知识点详情（包含题目和答案）
+    knowledge_points = KnowledgePoint.query.filter(
+        KnowledgePoint.id.in_(kp_ids)
+    ).all()
+    
+    result = []
+    for kp in knowledge_points:
+        kp_dict = kp.to_dict()
+        # 获取条目详情
+        items = KnowledgePointItem.query.filter_by(knowledge_point_id=kp.id).order_by(KnowledgePointItem.order).all()
+        kp_dict['items'] = [item.to_dict() for item in items]
+        result.append(kp_dict)
+    
+    return jsonify({'status': 'ok', 'data': result})
+
+# 随机获取知识点（用于默写练习）
+@app.route('/api/knowledge-points/random', methods=['GET'])
+def get_random_knowledge_points():
+    count = request.args.get('count', 10, type=int)
+    chapter_ids = request.args.getlist('chapter_id', type=int)
+    priority = request.args.get('priority')
+    
+    query = KnowledgePoint.query.filter_by(status='active')
+    
+    if chapter_ids:
+        query = query.filter(KnowledgePoint.chapter_id.in_(chapter_ids))
+    if priority:
+        query = query.filter_by(priority=priority)
+    
+    all_kps = query.all()
+    
+    # 随机选择
+    if len(all_kps) <= count:
+        selected = all_kps
+    else:
+        selected = random.sample(all_kps, count)
+    
+    return jsonify({
+        'status': 'ok',
+        'data': [kp.to_dict() for kp in selected]
+    })
+
 if __name__ == '__main__':
+    print("=== 启动 Flask 服务器 ===")
+    print(f"app.py 文件路径: {__file__}")
+    print(f"调试模式: True")
+    
     with app.app_context():
         db.create_all()
         if QuestionType.query.count() == 0:
@@ -1185,4 +1962,4 @@ if __name__ == '__main__':
             db.session.add(default_pref)
         db.session.commit()
 
-    app.run(debug=False, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5000)

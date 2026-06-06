@@ -15,6 +15,10 @@
             <el-icon><Document /></el-icon>
             <span v-if="!sidebarCollapsed">题库管理</span>
           </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/knowledge-points' }" @click="$router.push('/knowledge-points')">
+            <el-icon><Document /></el-icon>
+            <span v-if="!sidebarCollapsed">知识点</span>
+          </li>
           <li class="sidebar-menu-item" :class="{ active: $route.path === '/import' }" @click="$router.push('/import')">
             <el-icon><Upload /></el-icon>
             <span v-if="!sidebarCollapsed">Excel导入</span>
@@ -50,6 +54,29 @@
               错题练习
             </div>
           </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/memory') }" @click="showMemoryMenu = !showMemoryMenu">
+            <el-icon><Star /></el-icon>
+            <span v-if="!sidebarCollapsed">记忆模块</span>
+            <el-icon v-if="!sidebarCollapsed"><ArrowDown v-if="!showMemoryMenu" /><ArrowUp v-else /></el-icon>
+          </li>
+          <li v-if="showMemoryMenu && !sidebarCollapsed" class="sidebar-submenu">
+            <div class="sidebar-menu-item" @click="$router.push('/knowledge-points')">
+              <el-icon><Document /></el-icon>
+              知识点管理
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/practice')">
+              <el-icon><RefreshRight /></el-icon>
+              记忆练习
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/plan')">
+              <el-icon><Calendar /></el-icon>
+              记忆规划
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/dictation')">
+              <el-icon><EditPen /></el-icon>
+              默写练习
+            </div>
+          </li>
           <li class="sidebar-menu-item" :class="{ active: $route.path === '/wrong-questions' }" @click="$router.push('/wrong-questions')">
             <el-icon><CircleClose /></el-icon>
             <span v-if="!sidebarCollapsed">错题本</span>
@@ -81,9 +108,16 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuizStore } from '@/store/quiz'
+import { 
+  HomeFilled, Document, Upload, Folder, Collection, Reading, Memo, 
+  Sort, RefreshRight, WarnTriangleFilled, CircleClose, Star, 
+  DataAnalysis, Setting, DArrowLeft, DArrowRight, ArrowDown, ArrowUp,
+  Calendar, EditPen
+} from '@element-plus/icons-vue'
 
 const store = useQuizStore()
 const showPracticeMenu = ref(false)
+const showMemoryMenu = ref(false)
 const sidebarCollapsed = ref(false)
 
 const eyeProtectionClass = computed(() => {

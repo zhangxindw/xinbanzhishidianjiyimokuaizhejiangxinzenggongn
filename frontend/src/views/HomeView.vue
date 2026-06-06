@@ -101,6 +101,75 @@
       </el-col>
     </el-row>
 
+    <!-- 记忆规划数据预览卡片 -->
+    <div class="card memory-plan-card" style="margin-top: 20px;">
+      <div class="memory-plan-header">
+        <h3>记忆规划数据</h3>
+        <el-button type="primary" text @click="$router.push('/memory-plan')">
+          查看详情 <el-icon><ArrowRight /></el-icon>
+        </el-button>
+      </div>
+      <el-row :gutter="20" style="margin-top: 15px;">
+        <el-col :span="6">
+          <div class="memory-stat-item">
+            <div class="memory-stat-icon" style="background: #e6f7ff;">
+              <el-icon color="#1890ff"><Collection /></el-icon>
+            </div>
+            <div class="memory-stat-info">
+              <div class="memory-stat-value">{{ memoryPlan.total_records }}</div>
+              <div class="memory-stat-label">已加入规划</div>
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="memory-stat-item">
+            <div class="memory-stat-icon" style="background: #fff7e6;">
+              <el-icon color="#fa8c16"><Calendar /></el-icon>
+            </div>
+            <div class="memory-stat-info">
+              <div class="memory-stat-value">{{ memoryPlan.today_review_count }}</div>
+              <div class="memory-stat-label">今日预计复习</div>
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="memory-stat-item">
+            <div class="memory-stat-icon" style="background: #f6ffed;">
+              <el-icon color="#52c41a"><Sunrise /></el-icon>
+            </div>
+            <div class="memory-stat-info">
+              <div class="memory-stat-value">{{ memoryPlan.tomorrow_review_count }}</div>
+              <div class="memory-stat-label">明日预计复习</div>
+            </div>
+          </div>
+        </el-col>
+        <el-col :span="6">
+          <div class="memory-stat-item">
+            <div class="memory-stat-icon" style="background: #fff0f6;">
+              <el-icon color="#eb2f96"><TrendCharts /></el-icon>
+            </div>
+            <div class="memory-stat-info">
+              <div class="memory-stat-value">{{ next15DaysTotal }}</div>
+              <div class="memory-stat-label">近15天需复习</div>
+            </div>
+          </div>
+        </el-col>
+      </el-row>
+      <!-- 近15天复习趋势图 -->
+      <div class="review-chart" style="margin-top: 20px;">
+        <div class="chart-title">近15天复习计划趋势</div>
+        <div class="chart-bars">
+          <div v-for="(item, index) in memoryPlan.next_15_days" :key="index" class="chart-bar-item">
+            <div class="bar-wrapper">
+              <div class="bar" :style="{ height: getBarHeight(item.count) + 'px', background: getBarColor(item.count) }"></div>
+            </div>
+            <div class="bar-label">{{ item.date }}</div>
+            <div class="bar-value">{{ item.count }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card" style="margin-top: 20px;">
       <h3>最近导入记录</h3>
       <el-table :data="recentImports" style="width: 100%">
@@ -118,7 +187,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useQuizStore } from '@/store/quiz'
 import axios from 'axios'
 
@@ -130,6 +199,33 @@ const statistics = ref({
   wrong_count: 0
 })
 const recentImports = ref([])
+
+// 记忆规划数据
+const memoryPlan = ref({
+  total_records: 0,
+  today_review_count: 0,
+  tomorrow_review_count: 0,
+  next_15_days: []
+})
+
+// 近15天总复习数
+const next15DaysTotal = computed(() => {
+  return memoryPlan.value.next_15_days.reduce((sum, item) => sum + item.count, 0)
+})
+
+// 获取柱状图高度（最大80px）
+const getBarHeight = (count) => {
+  const max = Math.max(...memoryPlan.value.next_15_days.map(d => d.count), 1)
+  return Math.max((count / max) * 80, 4)
+}
+
+// 获取柱状图颜色
+const getBarColor = (count) => {
+  if (count === 0) return '#d9d9d9'
+  if (count <= 3) return '#52c41a'
+  if (count <= 6) return '#faad14'
+  return '#ff4d4f'
+}
 
 const formatTime = (timeStr) => {
   if (!timeStr) return ''
@@ -144,6 +240,15 @@ onMounted(async () => {
     recentImports.value = res.data.data || []
   } catch (e) {
     console.error('Failed to load logs:', e)
+  }
+  // 加载记忆规划数据
+  try {
+    const mpRes = await axios.get('/api/memory/preview')
+    if (mpRes.data.status === 'ok') {
+      memoryPlan.value = mpRes.data.data
+    }
+  } catch (e) {
+    console.error('Failed to load memory plan preview:', e)
   }
 })
 </script>
@@ -212,5 +317,105 @@ onMounted(async () => {
 
 .feature-item:last-child {
   border-bottom: none;
+}
+
+/* 记忆规划卡片样式 */
+.memory-plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.memory-plan-header h3 {
+  margin: 0;
+}
+
+.memory-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.memory-stat-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.memory-stat-value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+.memory-stat-label {
+  color: #666;
+  font-size: 13px;
+}
+
+/* 复习趋势图 */
+.review-chart {
+  padding: 15px;
+  background: #fafafa;
+  border-radius: 8px;
+}
+
+.chart-title {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 15px;
+}
+
+.chart-bars {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  height: 120px;
+  padding: 0 5px;
+}
+
+.chart-bar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+
+.bar-wrapper {
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  height: 90px;
+}
+
+.bar {
+  width: 70%;
+  min-width: 4px;
+  border-radius: 3px 3px 0 0;
+  transition: all 0.3s;
+}
+
+.bar-label {
+  font-size: 11px;
+  color: #999;
+  margin-top: 6px;
+  white-space: nowrap;
+  transform: rotate(-30deg);
+  transform-origin: center top;
+}
+
+.bar-value {
+  font-size: 11px;
+  color: #666;
+  margin-top: 2px;
 }
 </style>

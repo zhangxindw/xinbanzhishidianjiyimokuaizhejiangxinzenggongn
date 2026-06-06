@@ -83,6 +83,27 @@ const routes = [
     path: '/settings',
     name: 'Settings',
     component: () => import('@/views/SettingsView.vue')
+  },
+  // ========== 知识点记忆模块路由 ==========
+  {
+    path: '/knowledge-points',
+    name: 'KnowledgePoints',
+    component: () => import('@/views/KnowledgePointsView.vue')
+  },
+  {
+    path: '/memory/practice',
+    name: 'MemoryPractice',
+    component: () => import('@/views/MemoryPracticeView.vue')
+  },
+  {
+    path: '/memory/plan',
+    name: 'MemoryPlan',
+    component: () => import('@/views/MemoryPlanView.vue')
+  },
+  {
+    path: '/memory/dictation',
+    name: 'MemoryDictation',
+    component: () => import('@/views/DictationPracticeView.vue')
   }
 ]
 
