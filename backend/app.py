@@ -57,11 +57,22 @@ def to_html(value):
                    'td', 'th', 'tbody', 'thead', 'h1', 'h2', 'h3', 
                    'h4', 'h5', 'h6', 'a', 'pre', 'code', 'hr', 'sub', 'sup', 'mark']
     
-    # 分两步处理：先标记允许的标签，再转义其他字符
+    # 第一步：先处理格式标记（在转义前处理，避免干扰）
+    # **加粗** → <strong>加粗</strong>
+    s = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
+    # __下划线__ → <u>下划线</u>
+    s = re.sub(r'__(.+?)__', r'<u>\1</u>', s)
+    # ==高亮== → <mark>高亮</mark>
+    s = re.sub(r'==(.+?)==', r'<mark style="background-color: #ffff00;">\1</mark>', s)
+    # [[关键词]] → <span class="blank-hidden">关键词</span>
+    s = re.sub(r'\[\[(.+?)\]\]', r'<span class="blank-hidden">\1</span>', s)
+    
+    # 第二步：处理换行符
+    s = s.replace('\n', '<br>')
+    
+    # 第三步：标记允许的标签为占位符
     placeholder_map = {}
     placeholder_counter = 0
-    
-    # 匹配标签的正则表达式
     tag_regex = re.compile(r'</?(\w+)[^>]*>', re.IGNORECASE)
     
     def tag_replacer(match):
@@ -76,24 +87,12 @@ def to_html(value):
             # 非允许标签则转义
             return f'&lt;{match.group(0)[1:-1]}&gt;'
     
-    # 替换所有标签为占位符
     s = tag_regex.sub(tag_replacer, s)
     
-    # 转义其他HTML特殊字符
+    # 第四步：转义其他HTML特殊字符
     s = s.replace('&', '&amp;').replace('"', '&quot;').replace("'", '&#39;')
     
-    # 处理格式标记（在转义后处理）
-    # **加粗** → <strong>加粗</strong>
-    s = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
-    # __下划线__ → <u>下划线</u>
-    s = re.sub(r'__(.+?)__', r'<u>\1</u>', s)
-    # ==高亮== → <mark>高亮</mark>
-    s = re.sub(r'==(.+?)==', r'<mark style="background-color: #ffff00;">\1</mark>', s)
-    
-    # 处理换行符
-    s = s.replace('\n', '<br>')
-    
-    # 恢复安全标签
+    # 第五步：恢复安全标签（将占位符替换回原始标签）
     for placeholder, original_tag in placeholder_map.items():
         s = s.replace(placeholder, original_tag)
     
@@ -453,14 +452,24 @@ def upload_questions():
                 allowed_tags = ['img', 'br', 'p', 'div', 'span', 'strong', 'em', 
                                'b', 'i', 'u', 'ul', 'ol', 'li', 'table', 'tr', 
                                'td', 'th', 'tbody', 'thead', 'h1', 'h2', 'h3', 
-                               'h4', 'h5', 'h6', 'a', 'pre', 'code', 'hr', 'sub', 'sup']
+                               'h4', 'h5', 'h6', 'a', 'pre', 'code', 'hr', 'sub', 'sup', 'mark']
                 
-                # 分两步处理：先标记允许的标签，再转义其他字符
-                # 第一步：找出所有标签并暂时替换为占位符
+                # 第一步：先处理格式标记（在转义前处理，避免干扰）
+                # **加粗** → <strong>加粗</strong>
+                s = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', s)
+                # __下划线__ → <u>下划线</u>
+                s = re.sub(r'__(.+?)__', r'<u>\1</u>', s)
+                # ==高亮== → <mark>高亮</mark>
+                s = re.sub(r'==(.+?)==', r'<mark style="background-color: #ffff00;">\1</mark>', s)
+                # [[关键词]] → <span class="blank-hidden">关键词</span>
+                s = re.sub(r'\[\[(.+?)\]\]', r'<span class="blank-hidden">\1</span>', s)
+                
+                # 第二步：处理换行符
+                s = s.replace('\n', '<br>')
+                
+                # 第三步：标记允许的标签为占位符
                 placeholder_map = {}
                 placeholder_counter = 0
-                
-                # 匹配标签的正则表达式
                 tag_regex = re.compile(r'</?(\w+)[^>]*>', re.IGNORECASE)
                 
                 def tag_replacer(match):
@@ -475,18 +484,12 @@ def upload_questions():
                         # 非允许标签则转义
                         return f'&lt;{match.group(0)[1:-1]}&gt;'
                 
-                # 替换所有标签为占位符
                 s = tag_regex.sub(tag_replacer, s)
                 
-                # 第二步：转义其他HTML特殊字符
+                # 第四步：转义其他HTML特殊字符
                 s = s.replace('&', '&amp;').replace('"', '&quot;').replace("'", '&#39;')
                 
-                # 注意：我们已经通过占位符处理了<和>
-                
-                # 第三步：处理换行符
-                s = s.replace('\n', '<br>')
-                
-                # 第四步：恢复安全标签
+                # 第五步：恢复安全标签（将占位符替换回原始标签）
                 for placeholder, original_tag in placeholder_map.items():
                     s = s.replace(placeholder, original_tag)
                 
@@ -1384,12 +1387,13 @@ def handle_knowledge_point(kp_id):
                 if item.get('id') and item['id'] in existing_items:
                     # 更新现有条目
                     existing = existing_items[item['id']]
-                    existing.content = item.get('content', existing.content)
-                    # 如果前端发送了 content_html，直接使用；否则从 content 计算
+                    new_content = item.get('content', existing.content)
+                    existing.content = new_content
+                    # 如果前端发送了 content_html，直接使用；否则从新的 content 计算
                     if 'content_html' in item:
                         existing.content_html = item['content_html']
                     else:
-                        existing.content_html = to_html(existing.content)
+                        existing.content_html = to_html(new_content)
                     existing.order = idx
                     existing.blank_positions = item.get('blank_positions', existing.blank_positions)
                     updated_ids.add(item['id'])

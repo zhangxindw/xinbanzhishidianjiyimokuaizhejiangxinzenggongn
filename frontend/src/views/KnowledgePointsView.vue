@@ -343,6 +343,11 @@
             </el-radio-button>
           </el-radio-group>
           
+          <el-button size="small" type="primary" @click="insertBlankTag" class="blank-btn">
+            <el-icon><EditPen /></el-icon>
+            选中文字挖空
+          </el-button>
+          
           <!-- 批量输入模式 -->
           <div v-if="answerInputMode === 'batch'" class="batch-input">
             <el-input 
@@ -394,7 +399,8 @@
                 type="textarea" 
                 v-model="item.content" 
                 :rows="2"
-                placeholder="输入答案内容，用 [[关键词]] 包裹需要挖空的内容"
+                placeholder="输入答案内容，选中文字后点击「选中文字挖空」按钮添加挖空标记"
+                @focus="handleTextareaFocus(index)"
               />
               
               <!-- 预览 -->
@@ -425,11 +431,6 @@
               <el-icon><Plus /></el-icon>
               添加答案条目
             </el-button>
-          </div>
-          
-          <div class="blank-hint">
-            <el-icon><InfoFilled /></el-icon>
-            提示：使用 [[关键词]] 包裹需要挖空的内容
           </div>
         </div>
       </div>
@@ -717,6 +718,61 @@ const addItem = () => {
 
 const removeItem = (index) => {
   form.items.splice(index, 1)
+}
+
+// 保存当前聚焦的textarea索引
+const activeTextareaIndex = ref(null)
+
+// 当textarea获得焦点时记录索引
+const handleTextareaFocus = (index) => {
+  activeTextareaIndex.value = index
+}
+
+// 插入挖空标记到选中的文字
+const insertBlankTag = () => {
+  // 使用 window.getSelection() 获取选中的文字
+  const selection = window.getSelection()
+  
+  if (!selection || selection.rangeCount === 0) {
+    alert('请先点击答案输入框并选中要挖空的文字')
+    return
+  }
+  
+  const selectedText = selection.toString()
+  
+  if (!selectedText) {
+    alert('请先选中要挖空的文字')
+    return
+  }
+  
+  // 检查是否有记录的活动textarea索引
+  if (activeTextareaIndex.value === null) {
+    alert('请先点击答案输入框并选中要挖空的文字')
+    return
+  }
+  
+  const index = activeTextareaIndex.value
+  const content = form.items[index].content
+  
+  // 查找选中文字在内容中的位置
+  const startIndex = content.indexOf(selectedText)
+  
+  if (startIndex === -1) {
+    alert('未找到选中的文字，请重新选择')
+    return
+  }
+  
+  const endIndex = startIndex + selectedText.length
+  
+  // 在选中的文字前后添加挖空标记
+  const newValue = content.substring(0, startIndex) + 
+                   '[[' + selectedText + ']]' + 
+                   content.substring(endIndex)
+  
+  form.items[index].content = newValue
+  
+  // 清除选中状态
+  selection.removeAllRanges()
 }
 
 const openRelationDialog = async (itemIndex) => {
@@ -1390,6 +1446,11 @@ onMounted(() => {
   margin-bottom: 16px;
 }
 
+.blank-btn {
+  margin-left: 12px;
+  margin-bottom: 16px;
+}
+
 .batch-input {
   display: flex;
   flex-direction: column;
@@ -1476,18 +1537,6 @@ onMounted(() => {
 .add-item-btn {
   margin-top: 8px;
   width: 100%;
-}
-
-.blank-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 16px;
-  padding: 10px 14px;
-  background: #ecf5ff;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--el-color-primary, #409eff);
 }
 
 .dialog-footer {
