@@ -739,6 +739,11 @@ const toggleBlank = (key) => {
 const handleFeedback = async (feedback) => {
   if (!currentTask.value) return
   
+  // 立即重置显示状态（实时隐藏答案）
+  showMnemonic.value = false
+  showAllAnswers.value = false
+  revealedBlanks.value = new Map()
+  
   const currentIdx = currentIndex.value
   const kpId = currentTask.value.knowledge_point.id
   const currentTaskRef = currentTask.value  // 保存引用，避免后续操作影响
@@ -866,10 +871,6 @@ const handleFeedback = async (feedback) => {
     
     alert(errorMessage)
   }
-  
-  showMnemonic.value = false
-  showAllAnswers.value = false
-  revealedBlanks.value = new Map()
 }
 
 // 更新所有初学中任务的learning_repetition（每完成一个题目就减1）
