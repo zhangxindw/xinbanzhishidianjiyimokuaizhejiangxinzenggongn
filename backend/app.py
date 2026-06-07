@@ -12,7 +12,7 @@ from openpyxl import load_workbook, Workbook
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND_DIST = os.path.join(BASE_DIR, 'frontend', 'dist')
 
-app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path='')
+app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path='/static')
 app.config['SECRET_KEY'] = 'quiz-system-secret-key-2024'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quiz_system.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -1960,10 +1960,11 @@ def catch_all(path):
     if path.startswith('api/'):
         return jsonify({'status': 'error', 'message': 'Not found'}), 404
     
-    # 检查是否存在静态文件
-    file_path = os.path.join(app.static_folder, path)
-    if os.path.exists(file_path) and os.path.isfile(file_path):
-        return send_from_directory(app.static_folder, path)
+    # 处理静态文件（assets目录）
+    if path.startswith('assets/'):
+        file_path = os.path.join(app.static_folder, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return send_from_directory(app.static_folder, path)
     
     # 所有其他请求返回index.html，让Vue Router处理路由
     return send_from_directory(app.static_folder, 'index.html')
