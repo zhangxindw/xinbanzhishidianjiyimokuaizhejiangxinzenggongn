@@ -332,21 +332,23 @@
             <span class="answer-count">{{ form.items.length }} 条</span>
           </div>
           
-          <el-radio-group v-model="answerInputMode" size="small" class="input-mode-tabs">
-            <el-radio-button value="single">
-              <el-icon><Edit /></el-icon>
-              单条输入
-            </el-radio-button>
-            <el-radio-button value="batch">
-              <el-icon><DocumentCopy /></el-icon>
-              批量输入
-            </el-radio-button>
-          </el-radio-group>
-          
-          <el-button size="small" type="primary" @click="insertBlankTag" class="blank-btn">
-            <el-icon><EditPen /></el-icon>
-            选中文字挖空
-          </el-button>
+          <div class="button-group">
+            <el-radio-group v-model="answerInputMode" size="small" class="input-mode-tabs">
+              <el-radio-button value="single">
+                <el-icon><Edit /></el-icon>
+                单条输入
+              </el-radio-button>
+              <el-radio-button value="batch">
+                <el-icon><DocumentCopy /></el-icon>
+                批量输入
+              </el-radio-button>
+            </el-radio-group>
+            
+            <el-button size="small" type="primary" @click="insertBlankTag" class="blank-btn">
+              <el-icon><EditPen /></el-icon>
+              选中文字挖空
+            </el-button>
+          </div>
           
           <!-- 批量输入模式 -->
           <div v-if="answerInputMode === 'batch'" class="batch-input">
@@ -1442,13 +1444,15 @@ onMounted(() => {
 }
 
 /* 答案输入区 */
-.input-mode-tabs {
+.button-group {
+  display: flex;
+  align-items: center;
   margin-bottom: 16px;
+  gap: 12px;
 }
 
 .blank-btn {
-  margin-left: 12px;
-  margin-bottom: 16px;
+  flex-shrink: 0;
 }
 
 .batch-input {
