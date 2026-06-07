@@ -903,6 +903,7 @@ const prevTask = () => {
   if (currentIndex.value > 0) {
     currentIndex.value--
     showMnemonic.value = false
+    showAllAnswers.value = false
     revealedBlanks.value = new Map()
   }
 }
@@ -911,6 +912,7 @@ const nextTask = () => {
   if (currentIndex.value < tasks.value.length - 1) {
     currentIndex.value++
     showMnemonic.value = false
+    showAllAnswers.value = false
     revealedBlanks.value = new Map()
   }
 }
