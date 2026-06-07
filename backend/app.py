@@ -2,13 +2,17 @@ import os
 import uuid
 import random
 from datetime import datetime, timedelta
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from models import db, Question, Chapter, QuestionType, WrongQuestion, FavoriteQuestion, UserAnswer, UserPreference, OperationLog, KnowledgePoint, KnowledgePointItem, KnowledgePointRelation, MemoryRecord
 from openpyxl import load_workbook, Workbook
 
-app = Flask(__name__)
+# 获取backend目录的父目录（即项目根目录）
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIST = os.path.join(BASE_DIR, 'frontend', 'dist')
+
+app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path='')
 app.config['SECRET_KEY'] = 'quiz-system-secret-key-2024'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quiz_system.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -19,6 +23,18 @@ CORS(app)
 db.init_app(app)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+# 提供前端静态文件
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
+
+@app.route('/<path:path>')
+def serve_static(path):
+    file_path = os.path.join(app.static_folder, path)
+    if os.path.exists(file_path):
+        return send_from_directory(app.static_folder, path)
+    return send_from_directory(app.static_folder, 'index.html')
 
 # 全局错误处理器
 @app.errorhandler(Exception)
