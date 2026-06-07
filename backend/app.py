@@ -29,13 +29,6 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
-@app.route('/<path:path>')
-def serve_static(path):
-    file_path = os.path.join(app.static_folder, path)
-    if os.path.exists(file_path):
-        return send_from_directory(app.static_folder, path)
-    return send_from_directory(app.static_folder, 'index.html')
-
 # 全局错误处理器
 @app.errorhandler(Exception)
 def handle_exception(e):
@@ -1959,6 +1952,21 @@ def get_random_knowledge_points():
         'status': 'ok',
         'data': [kp.to_dict() for kp in selected]
     })
+
+# 最后添加：为Vue Router历史模式配置catch-all路由
+@app.route('/<path:path>')
+def catch_all(path):
+    # 如果是API请求，让它继续到404
+    if path.startswith('api/'):
+        return jsonify({'status': 'error', 'message': 'Not found'}), 404
+    
+    # 检查是否存在静态文件
+    file_path = os.path.join(app.static_folder, path)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return send_from_directory(app.static_folder, path)
+    
+    # 所有其他请求返回index.html，让Vue Router处理路由
+    return send_from_directory(app.static_folder, 'index.html')
 
 if __name__ == '__main__':
     print("=== 启动 Flask 服务器 ===")
