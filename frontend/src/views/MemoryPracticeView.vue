@@ -868,6 +868,7 @@ const handleFeedback = async (feedback) => {
   }
   
   showMnemonic.value = false
+  showAllAnswers.value = false
   revealedBlanks.value = new Map()
 }
 
