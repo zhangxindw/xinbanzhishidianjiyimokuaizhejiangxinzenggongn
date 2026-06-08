@@ -1479,6 +1479,8 @@ onMounted(async () => {
   justify-content: center;
   gap: 20px;
   margin-bottom: 20px;
+  position: relative;
+  z-index: 100;
 }
 
 .feedback-section .el-button {
