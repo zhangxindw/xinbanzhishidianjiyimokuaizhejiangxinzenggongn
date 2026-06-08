@@ -356,42 +356,8 @@ const toggleAllAnswers = () => {
   showAllAnswers.value = !showAllAnswers.value
 }
 
-// 初始化挖空点击事件（使用事件委托）
-const initBlankClickEvents = () => {
-  document.addEventListener('click', (e) => {
-    // 检查是否点击了反馈按钮或其子元素，如果是则不处理
-    let target = e.target
-    let isFeedbackButton = false
-    
-    while (target && target !== document) {
-      if (target.classList && (
-        target.classList.contains('feedback-section') ||
-        target.classList.contains('el-button--success') ||
-        target.classList.contains('el-button--warning') ||
-        target.classList.contains('el-button--danger') ||
-        (target.tagName === 'BUTTON' && target.closest('.feedback-section'))
-      )) {
-        isFeedbackButton = true
-        break
-      }
-      target = target.parentElement
-    }
-    
-    if (isFeedbackButton) {
-      return // 点击的是反馈按钮区域，不处理
-    }
-    
-    // 检查是否点击了blank-hidden元素
-    if (e.target.classList.contains('blank-hidden')) {
-      e.target.classList.toggle('blank-revealed')
-    }
-  })
-}
-
-// 在组件挂载时初始化
-onMounted(() => {
-  initBlankClickEvents()
-})
+// 暂时禁用全局点击事件监听器，避免干扰反馈按钮
+// 挖空功能暂时通过点击"显示/隐藏全部答案"按钮来控制
 
 // 字体大小控制
 const increaseFontSize = () => {
