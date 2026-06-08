@@ -846,9 +846,15 @@ const handleFeedback = async (feedback) => {
       const taskId = currentTaskRef.knowledge_point.id
       
       // 计算新位置
-      // 确保learning_repetition至少为1，否则任务会被移到当前位置，看起来什么都没发生
+      // 确保任务至少向后移动1个位置，否则看起来什么都没发生
       console.log('DEBUG: recordLearningRepetition=', recordLearningRepetition, 'type=', typeof recordLearningRepetition)
       let effectiveLearningRepetition = Math.max(1, recordLearningRepetition || 0)
+      
+      // 先删除当前任务
+      tasks.value.splice(currentIdx, 1)
+      
+      // 计算新位置：删除后，如果原来的位置有任务，就保持当前索引（显示下一个任务）
+      // 然后把任务插入到 effectiveLearningRepetition 位置之后
       let newPosition = currentIdx + effectiveLearningRepetition
       
       console.log('DEBUG: currentIdx=', currentIdx, 'effectiveLearningRepetition=', effectiveLearningRepetition, 'newPosition=', newPosition, 'tasks.length=', tasks.value.length)
@@ -856,12 +862,10 @@ const handleFeedback = async (feedback) => {
       // 如果新位置超出范围，说明需要循环
       if (newPosition >= tasks.value.length) {
         // 需要循环：将任务移到末尾
-        tasks.value.splice(currentIdx, 1)
         tasks.value.push(currentTaskRef)
         console.log('任务移到末尾，列表长度:', tasks.value.length)
       } else {
-        // 不需要循环：直接移动到指定位置之后
-        tasks.value.splice(currentIdx, 1)
+        // 不需要循环：直接移动到指定位置
         tasks.value.splice(newPosition, 0, currentTaskRef)
         console.log('任务移到位置', newPosition, '，列表长度:', tasks.value.length, '原learning_repetition:', recordLearningRepetition, '有效:', effectiveLearningRepetition)
       }
