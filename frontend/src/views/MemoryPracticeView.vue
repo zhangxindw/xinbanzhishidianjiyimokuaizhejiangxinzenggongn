@@ -361,16 +361,24 @@ const initBlankClickEvents = () => {
   document.addEventListener('click', (e) => {
     // 检查是否点击了反馈按钮或其子元素，如果是则不处理
     let target = e.target
+    let isFeedbackButton = false
+    
     while (target && target !== document) {
       if (target.classList && (
         target.classList.contains('feedback-section') ||
         target.classList.contains('el-button--success') ||
         target.classList.contains('el-button--warning') ||
-        target.classList.contains('el-button--danger')
+        target.classList.contains('el-button--danger') ||
+        (target.tagName === 'BUTTON' && target.closest('.feedback-section'))
       )) {
-        return // 点击的是反馈按钮区域，不处理
+        isFeedbackButton = true
+        break
       }
       target = target.parentElement
+    }
+    
+    if (isFeedbackButton) {
+      return // 点击的是反馈按钮区域，不处理
     }
     
     // 检查是否点击了blank-hidden元素
@@ -838,7 +846,9 @@ const handleFeedback = async (feedback) => {
       const taskId = currentTaskRef.knowledge_point.id
       
       // 计算新位置
-      let newPosition = currentIdx + recordLearningRepetition
+      // 确保learning_repetition至少为1，否则任务会被移到当前位置，看起来什么都没发生
+      let effectiveLearningRepetition = Math.max(1, recordLearningRepetition)
+      let newPosition = currentIdx + effectiveLearningRepetition
       
       // 如果新位置超出范围，说明需要循环
       if (newPosition >= tasks.value.length) {
@@ -850,7 +860,7 @@ const handleFeedback = async (feedback) => {
         // 不需要循环：直接移动到指定位置之后
         tasks.value.splice(currentIdx, 1)
         tasks.value.splice(newPosition, 0, currentTaskRef)
-        console.log('任务移到位置', newPosition, '，列表长度:', tasks.value.length)
+        console.log('任务移到位置', newPosition, '，列表长度:', tasks.value.length, '原learning_repetition:', recordLearningRepetition, '有效:', effectiveLearningRepetition)
       }
       
       // 更新currentIndex到下一个题目（原位置的下一个任务）
