@@ -847,8 +847,11 @@ const handleFeedback = async (feedback) => {
       
       // 计算新位置
       // 确保learning_repetition至少为1，否则任务会被移到当前位置，看起来什么都没发生
-      let effectiveLearningRepetition = Math.max(1, recordLearningRepetition)
+      console.log('DEBUG: recordLearningRepetition=', recordLearningRepetition, 'type=', typeof recordLearningRepetition)
+      let effectiveLearningRepetition = Math.max(1, recordLearningRepetition || 0)
       let newPosition = currentIdx + effectiveLearningRepetition
+      
+      console.log('DEBUG: currentIdx=', currentIdx, 'effectiveLearningRepetition=', effectiveLearningRepetition, 'newPosition=', newPosition, 'tasks.length=', tasks.value.length)
       
       // 如果新位置超出范围，说明需要循环
       if (newPosition >= tasks.value.length) {
