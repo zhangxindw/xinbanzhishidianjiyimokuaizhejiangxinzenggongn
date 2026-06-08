@@ -161,7 +161,7 @@
           </div>
           
           <!-- 答案显示模式 - 使用v-html渲染content_html -->
-          <div v-else class="item-content" :class="{ 'answers-hidden': !showAllAnswers }" :style="{ fontSize: fontSize + 'px' }" v-html="currentTask.knowledge_point.items[index].content_html || currentTask.knowledge_point.items[index].content">
+          <div v-else class="item-content" :class="{ 'answers-hidden': !showAllAnswers }" :style="{ fontSize: fontSize + 'px' }" v-html="currentTask.knowledge_point.items[index].content_html || currentTask.knowledge_point.items[index].content" @click="handleItemContentClick">
           </div>
           <el-button 
             v-if="!isAnswerEditing && currentTask.knowledge_point.items[index].relations?.length > 0"
@@ -356,8 +356,19 @@ const toggleAllAnswers = () => {
   showAllAnswers.value = !showAllAnswers.value
 }
 
-// 暂时禁用全局点击事件监听器，避免干扰反馈按钮
-// 挖空功能暂时通过点击"显示/隐藏全部答案"按钮来控制
+// 点击内容区域的挖空元素时，切换单个挖空的显示/隐藏
+const handleItemContentClick = (event) => {
+  // 向上查找点击目标是否在挖空元素内
+  let target = event.target
+  while (target && target !== event.currentTarget) {
+    if (target.classList && (target.classList.contains('blank-hidden') || target.classList.contains('blank-revealed'))) {
+      // 切换挖空状态
+      target.classList.toggle('blank-revealed')
+      return
+    }
+    target = target.parentElement
+  }
+}
 
 // 字体大小控制
 const increaseFontSize = () => {

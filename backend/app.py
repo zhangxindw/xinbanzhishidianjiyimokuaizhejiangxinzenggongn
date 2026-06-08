@@ -1714,10 +1714,18 @@ def memory_feedback():
         # ==========================================
         if feedback == 'remembered':
             # "背出了"：consecutive_correct + 1，间隔前进
-            record.consecutive_correct += 1
+            # 同一天只能增加一个档位，同一天多次选择背出了也只增加一档
+            if record.last_review_date == today:
+                # 今天已经复习过了，今天已经增加过档位了，不再重复增加
+                pass
+            else:
+                # 今天第一次背出了，增加一档
+                record.consecutive_correct += 1
             
-            if record.consecutive_correct < len(intervals):
-                record.interval_days = intervals[record.consecutive_correct]
+            # 计算新间隔（consecutive_correct从1开始，所以索引是consecutive_correct-1）
+            if record.consecutive_correct <= len(intervals):
+                # 在标准档位范围内
+                record.interval_days = intervals[record.consecutive_correct - 1]
             else:
                 # 已达最大档位，按1.5倍缓慢增加，最大365天
                 record.interval_days = min(int(record.interval_days * 1.5), 365)
@@ -1731,12 +1739,12 @@ def memory_feedback():
             record.next_review_date = today + timedelta(days=record.interval_days)
             
         else:
-            # "背不出"：打回初学状态，重新开始
+            # "背不出"：打回初学状态，重新开始短间隔循环
             record.status = 'learning'
             record.consecutive_correct = 0
             record.interval_days = 1
             record.next_review_date = today
-            record.learning_repetition = 0  # 立即可以复习
+            record.learning_repetition = 3  # 安排在3个题目之后出现
             record.today_consecutive_count = 0  # 重置连续计数
     
     record.last_review_date = today
