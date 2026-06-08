@@ -1,0 +1,33 @@
+# 数据库文件 - 不要被 git 管理，防止部署时覆盖
+backend/instance/quiz_system.db
+backend/quiz_system.db
+instance/quiz_system.db
+*.db.backup
+*.db.backup_*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node modules
+node_modules/
+
+# Build output
+frontend/dist/assets/*.js
+frontend/dist/assets/*.css
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
