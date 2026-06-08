@@ -177,15 +177,15 @@
       </div>
 
       <div class="feedback-section">
-        <el-button type="success" @click="handleFeedback('remembered')">
+        <el-button type="success" @click.stop="handleFeedback('remembered')">
           <el-icon><VideoPlay /></el-icon>
           背出了
         </el-button>
-        <el-button type="warning" @click="handleFeedback('fuzzy')">
+        <el-button type="warning" @click.stop="handleFeedback('fuzzy')">
           <el-icon><Clock /></el-icon>
           模糊
         </el-button>
-        <el-button type="danger" @click="handleFeedback('forgot')">
+        <el-button type="danger" @click.stop="handleFeedback('forgot')">
           <el-icon><Delete /></el-icon>
           背不出
         </el-button>
