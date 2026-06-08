@@ -750,8 +750,20 @@ const toggleBlank = (key) => {
   revealedBlanks.value = new Map(revealedBlanks.value)
 }
 
+// 防抖标记，防止重复点击
+let isProcessingFeedback = false
+
 const handleFeedback = async (feedback) => {
+  // 防止重复点击
+  if (isProcessingFeedback) {
+    console.log('正在处理反馈，请等待...')
+    return
+  }
+  
   if (!currentTask.value) return
+  
+  // 设置处理标记
+  isProcessingFeedback = true
   
   // 立即重置显示状态（实时隐藏答案）
   showMnemonic.value = false
@@ -841,10 +853,16 @@ const handleFeedback = async (feedback) => {
         console.log('任务移到位置', newPosition, '，列表长度:', tasks.value.length)
       }
       
-      // 确保currentIndex有效
-      if (currentIndex.value >= tasks.value.length) {
+      // 更新currentIndex到下一个题目（原位置的下一个任务）
+      // 如果删除的是最后一个任务，currentIndex保持不变（会显示倒数第二个任务）
+      if (currentIndex.value < tasks.value.length) {
+        // 如果当前位置还有任务，保持当前索引（因为已经是下一个任务了）
+        // 如果删除的是最后一个，索引已经是有效的
+      } else {
         currentIndex.value = tasks.value.length - 1
       }
+      
+      console.log('更新后 - currentIndex:', currentIndex.value, '当前任务ID:', tasks.value[currentIndex.value]?.knowledge_point?.id)
     }
     
     // 更新当前任务的显示状态（用于UI反馈）
@@ -884,6 +902,9 @@ const handleFeedback = async (feedback) => {
     }
     
     alert(errorMessage)
+  } finally {
+    // 重置处理标记
+    isProcessingFeedback = false
   }
 }
 
