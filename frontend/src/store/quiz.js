@@ -143,6 +143,21 @@ export const useQuizStore = defineStore('quiz', {
     },
 
     async practiceMemorize(params = {}) {
+      // 处理多章节参数，将数组展开为多个 query 参数
+      if (params.chapter_ids && Array.isArray(params.chapter_ids)) {
+        const chapterIds = params.chapter_ids
+        delete params.chapter_ids
+        // 使用传统方式序列化数组参数：chapter_ids=1&chapter_ids=2
+        const searchParams = new URLSearchParams()
+        for (const key in params) {
+          if (params[key] !== undefined && params[key] !== null) {
+            searchParams.append(key, params[key])
+          }
+        }
+        chapterIds.forEach(id => searchParams.append('chapter_ids', id))
+        const res = await axios.get(`/api/practice/memorize?${searchParams.toString()}`)
+        return res.data
+      }
       const res = await api.get('/practice/memorize', { params })
       return res.data
     },

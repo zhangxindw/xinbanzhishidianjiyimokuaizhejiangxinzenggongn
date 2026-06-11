@@ -769,6 +769,10 @@ const displayOptions = computed(() => {
 const getDisplayAnswer = () => {
   if (!currentQuestion.value) return ''
   if (lastCorrectAnswer.value) return lastCorrectAnswer.value
+  // 考虑打乱选项的情况：如果选项被打乱，显示打乱后的正确答案
+  if (currentQuestion.value?.shuffled_options) {
+    return currentQuestion.value?.shuffled_answer || ''
+  }
   return currentQuestion.value?.answer || ''
 }
 
@@ -854,7 +858,8 @@ const startPractice = async () => {
     if (practiceMode.value === 'memorize') {
       const params = { per_page: 10000 }
       if (config.chapterIds.length > 0) {
-        params.chapter_id = config.chapterIds[0]
+        // 支持多章节选择
+        params.chapter_ids = config.chapterIds
       }
       result = await store.practiceMemorize(params)
       questions.value = result.data

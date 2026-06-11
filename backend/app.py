@@ -14,7 +14,11 @@ FRONTEND_DIST = os.path.join(BASE_DIR, 'frontend', 'dist')
 
 app = Flask(__name__, static_folder=FRONTEND_DIST, static_url_path='/static')
 app.config['SECRET_KEY'] = 'quiz-system-secret-key-2024'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///quiz_system.db'
+# 数据库使用绝对路径（backend目录下的instance/quiz_system.db），不依赖启动目录
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BACKEND_DIR, 'instance', 'quiz_system.db')
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024
@@ -694,11 +698,14 @@ def export_questions():
 
 @app.route('/api/practice/memorize', methods=['GET'])
 def practice_memorize():
+    chapter_ids = request.args.getlist('chapter_ids', type=int)
     chapter_id = request.args.get('chapter_id', type=int)
     question_type_id = request.args.get('question_type_id', type=int)
 
     query = Question.query.filter_by(status='published')
-    if chapter_id:
+    if chapter_ids:
+        query = query.filter(Question.chapter_id.in_(chapter_ids))
+    elif chapter_id:
         query = query.filter_by(chapter_id=chapter_id)
     if question_type_id:
         query = query.filter_by(question_type_id=question_type_id)
