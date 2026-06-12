@@ -27,7 +27,18 @@
           <span class="source-chapter">{{ jumpSourceInfo?.chapter }}</span>
           <span class="source-question">{{ jumpSourceInfo?.question?.substring(0, 50) }}{{ jumpSourceInfo?.question?.length > 50 ? '...' : '' }}</span>
           <span v-if="jumpSourceInfo?.sourceItem" class="source-item">
-            关联答案：{{ jumpSourceInfo.sourceItem.content }}
+            关联答案：{{ stripBlankMarkers(jumpSourceInfo.sourceItem.content) }}
+          </span>
+        </div>
+      </div>
+      
+      <!-- 被关联信息（自然跳转时显示，不显示返回按钮） -->
+      <div v-if="!isJumped && referencedByInfo" class="jump-source-info referenced-info">
+        <div class="source-detail">
+          <span class="source-chapter">{{ referencedByInfo?.source_chapter_name }}</span>
+          <span class="source-question">{{ referencedByInfo?.source_kp_question?.substring(0, 50) }}{{ referencedByInfo?.source_kp_question?.length > 50 ? '...' : '' }}</span>
+          <span v-if="referencedByInfo?.source_item_content" class="source-item">
+            关联答案：{{ stripBlankMarkers(referencedByInfo.source_item_content) }}
           </span>
         </div>
       </div>
@@ -262,6 +273,7 @@ const navigationHistory = ref([])
 const isJumped = ref(false)  // 是否从关联跳转而来
 const jumpSourceInfo = ref(null)  // 来源信息
 const currentRelationItem = ref(null)  // 当前正在跳转的条目
+const referencedByInfo = ref(null)  // 被其他答案关联的信息（自然跳转时显示）
 
 // 编辑功能状态
 const isQuestionEditing = ref(false)  // 题目是否处于编辑模式
@@ -277,6 +289,13 @@ const currentTextStyle = ref({
   highlight: false,
   color: '#333333'
 })
+
+// 去除挖空标记符号 [[ 和 ]]
+const stripBlankMarkers = (text) => {
+  if (!text) return ''
+  // 去除 [[ 和 ]] 符号，只保留里面的文字
+  return text.replace(/\[\[(.*?)\]\]/g, '$1')
+}
 
 const currentTask = computed(() => tasks.value[currentIndex.value])
 
@@ -684,6 +703,9 @@ const loadTasks = async () => {
     })
     
     console.log('加载的任务:', tasks.value)
+    
+    // 加载当前题目的被关联信息
+    loadReferencedByInfo()
   } catch (error) {
     console.error('加载任务失败:', error)
     alert('加载任务失败: ' + (error.response?.data?.message || error.message))
@@ -899,6 +921,8 @@ const handleFeedback = async (feedback) => {
   } finally {
     // 重置处理标记
     isProcessingFeedback = false
+    // 加载当前题目的被关联信息
+    loadReferencedByInfo()
   }
 }
 
@@ -936,6 +960,10 @@ const prevTask = () => {
     showMnemonic.value = false
     showAllAnswers.value = false
     revealedBlanks.value = new Map()
+    // 清除跳转状态，加载被关联信息
+    isJumped.value = false
+    jumpSourceInfo.value = null
+    loadReferencedByInfo()
   }
 }
 
@@ -945,6 +973,10 @@ const nextTask = () => {
     showMnemonic.value = false
     showAllAnswers.value = false
     revealedBlanks.value = new Map()
+    // 清除跳转状态，加载被关联信息
+    isJumped.value = false
+    jumpSourceInfo.value = null
+    loadReferencedByInfo()
   }
 }
 
@@ -985,6 +1017,8 @@ const jumpToKnowledgePoint = async (kpId, sourceItem = null) => {
     revealedBlanks.value = new Map()  // 重置挖空状态
     showMnemonic.value = false
     isJumped.value = true
+    // 清除被关联信息（因为是主动跳转，不需要显示被关联信息）
+    referencedByInfo.value = null
     // 设置来源信息
     jumpSourceInfo.value = {
       chapter: currentTask.value.knowledge_point.chapter_name,
@@ -1011,6 +1045,8 @@ const jumpToKnowledgePoint = async (kpId, sourceItem = null) => {
       revealedBlanks.value = new Map()
       showMnemonic.value = false
       isJumped.value = true
+      // 清除被关联信息（因为是主动跳转，不需要显示被关联信息）
+      referencedByInfo.value = null
       // 设置来源信息
       jumpSourceInfo.value = {
         chapter: navigationHistory.value.length > 0 
@@ -1042,6 +1078,30 @@ const goBack = () => {
     showMnemonic.value = false
     isJumped.value = navigationHistory.value.length > 0
     jumpSourceInfo.value = null
+    // 返回时也需要重新获取被关联信息
+    loadReferencedByInfo()
+  }
+}
+
+// 获取当前知识点被哪些答案关联的信息
+const loadReferencedByInfo = async () => {
+  if (!currentTask.value || !currentTask.value.knowledge_point) {
+    referencedByInfo.value = null
+    return
+  }
+  
+  try {
+    const kpId = currentTask.value.knowledge_point.id
+    const res = await axios.get(`/api/knowledge-points/${kpId}/referenced-by`)
+    if (res.data.status === 'ok' && res.data.data && res.data.data.length > 0) {
+      // 如果有多条关联信息，取第一条（或可以显示多条）
+      referencedByInfo.value = res.data.data[0]
+    } else {
+      referencedByInfo.value = null
+    }
+  } catch (e) {
+    console.error('获取被关联信息失败:', e)
+    referencedByInfo.value = null
   }
 }
 
@@ -1216,6 +1276,11 @@ onMounted(async () => {
   border-radius: 8px;
   padding: 12px 16px;
   margin-bottom: 16px;
+}
+
+.jump-source-info.referenced-info {
+  background: #e6f7ff;
+  border: 1px solid #91d5ff;
 }
 
 .back-btn {

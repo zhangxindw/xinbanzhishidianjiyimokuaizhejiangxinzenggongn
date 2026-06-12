@@ -1571,6 +1571,36 @@ def delete_kp_relation(relation_id):
     db.session.commit()
     return jsonify({'status': 'ok', 'message': 'Relation deleted'})
 
+# 获取知识点被关联的信息（反向查询：哪些答案条目关联了这个知识点）
+@app.route('/api/knowledge-points/<int:kp_id>/referenced-by', methods=['GET'])
+def get_kp_referenced_by(kp_id):
+    """获取知识点被哪些答案条目关联"""
+    # 查询所有 target_kp_id 或 target_id 等于 kp_id 的关联记录
+    relations = KnowledgePointRelation.query.filter(
+        (KnowledgePointRelation.target_kp_id == kp_id) | 
+        (KnowledgePointRelation.target_id == kp_id)
+    ).all()
+    
+    result = []
+    for rel in relations:
+        # 获取源条目信息
+        if rel.source_item_id:
+            source_item = KnowledgePointItem.query.get(rel.source_item_id)
+            if source_item:
+                source_kp = KnowledgePoint.query.get(source_item.knowledge_point_id)
+                if source_kp:
+                    result.append({
+                        'relation_id': rel.id,
+                        'source_kp_id': source_kp.id,
+                        'source_kp_question': source_kp.question,
+                        'source_chapter_id': source_kp.chapter_id,
+                        'source_chapter_name': source_kp.chapter.name if source_kp.chapter else '',
+                        'source_item_id': source_item.id,
+                        'source_item_content': source_item.content
+                    })
+    
+    return jsonify({'status': 'ok', 'data': result})
+
 # 删除记忆记录（移出记忆规划）
 @app.route('/api/memory-record/<int:kp_id>', methods=['DELETE'])
 def delete_memory_record(kp_id):
