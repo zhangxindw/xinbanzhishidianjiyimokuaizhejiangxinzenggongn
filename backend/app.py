@@ -1264,6 +1264,7 @@ def handle_knowledge_points():
         priority = request.args.get('priority')
         keyword = request.args.get('keyword')
         user_id = request.args.get('user_id', 'default_user')
+        exclude_in_plan = request.args.get('exclude_in_plan', 'false').lower() == 'true'
 
         # 兼容旧数据：查询 status 为 'active' 或 'published' 的知识点
         query = KnowledgePoint.query.filter(KnowledgePoint.status.in_(['active', 'published']))
@@ -1277,11 +1278,18 @@ def handle_knowledge_points():
         if keyword:
             query = query.filter(KnowledgePoint.question.like('%' + keyword + '%'))
 
+        # 如果需要排除已加入规划的知识点，先获取已加入规划的知识点ID
+        excluded_ids = set()
+        if exclude_in_plan:
+            memory_records = MemoryRecord.query.filter_by(user_id=user_id).all()
+            excluded_ids = {mr.knowledge_point_id for mr in memory_records}
+            query = query.filter(~KnowledgePoint.id.in_(excluded_ids))
+
         pagination = query.order_by(KnowledgePoint.chapter_id, KnowledgePoint.created_at).paginate(
             page=page, per_page=per_page, error_out=False
         )
         
-        # 获取用户的记忆记录
+        # 获取用户的记忆记录（用于标记 in_plan 状态）
         memory_records = {mr.knowledge_point_id: mr for mr in MemoryRecord.query.filter_by(user_id=user_id).all()}
         
         result = []

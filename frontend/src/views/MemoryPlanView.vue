@@ -143,6 +143,19 @@
           添加选中到记忆规划
         </el-button>
       </div>
+
+      <!-- 分页组件 -->
+      <div class="pagination-wrapper">
+        <el-pagination
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
+          :current-page="currentPage"
+          :page-sizes="[15, 20, 30, 50]"
+          :page-size="pageSize"
+          :total="totalItems"
+          layout="total, sizes, prev, pager, next, jumper"
+        />
+      </div>
     </div>
 
     <!-- 艾宾浩斯曲线说明 -->
@@ -195,6 +208,12 @@ const filterChapter = ref('')
 const filterPriority = ref('')
 const filterKeyword = ref('')
 
+// 分页相关变量
+const currentPage = ref(1)
+const pageSize = ref(15)
+const totalItems = ref(0)
+const totalPages = ref(0)
+
 const loadStats = async () => {
   const res = await axios.get('/api/memory/statistics?user_id=default_user')
   Object.assign(stats, res.data.data || {})
@@ -235,28 +254,45 @@ const loadChapters = async () => {
   chapters.value = res.data.data || []
 }
 
-const loadAvailableKnowledgePoints = async () => {
+const loadAvailableKnowledgePoints = async (page = 1) => {
   try {
     const params = new URLSearchParams()
-    if (filterChapter.value) params.set('chapter_id', filterChapter.value)
-    if (filterPriority.value) params.set('priority', filterPriority.value)
+    params.set('page', page)
+    params.set('per_page', pageSize.value)
+    params.set('exclude_in_plan', 'true')  // 后端过滤已加入规划的知识点
+    // 只有当 filterChapter 有实际值（非空字符串、非undefined、非null）时才添加筛选条件
+    if (filterChapter.value !== '' && filterChapter.value !== undefined && filterChapter.value !== null) {
+      params.set('chapter_id', filterChapter.value)
+    }
+    if (filterPriority.value !== '' && filterPriority.value !== undefined && filterPriority.value !== null) {
+      params.set('priority', filterPriority.value)
+    }
     if (filterKeyword.value) params.set('keyword', filterKeyword.value)
     
     const res = await axios.get(`/api/knowledge-points?${params}`)
-    console.log('所有知识点:', res.data.data)
+    console.log('知识点:', res.data)
     
-    // 获取已在记忆规划中的知识点ID
-    const memoryRes = await axios.get('/api/memory-records?user_id=default_user')
-    const existingIds = new Set(memoryRes.data.data.map(r => r.knowledge_point_id))
-    console.log('已添加的知识点ID:', existingIds)
-    
-    // 过滤掉已添加的知识点
-    availableKnowledgePoints.value = res.data.data.filter(kp => !existingIds.has(kp.id))
+    // 后端已经过滤了已加入规划的知识点，直接使用
+    availableKnowledgePoints.value = res.data.data
     console.log('可用知识点:', availableKnowledgePoints.value)
+    
+    // 更新分页信息
+    totalItems.value = res.data.total
+    totalPages.value = res.data.pages
+    currentPage.value = res.data.page
   } catch (error) {
     console.error('加载知识点失败:', error)
     alert('加载知识点失败: ' + (error.response?.data?.message || error.message))
   }
+}
+
+const handlePageChange = (page) => {
+  loadAvailableKnowledgePoints(page)
+}
+
+const handleSizeChange = (size) => {
+  pageSize.value = size
+  loadAvailableKnowledgePoints(1)
 }
 
 const getPriorityClass = (priority) => {
@@ -461,5 +497,11 @@ onMounted(async () => {
 
 .curve-item li {
   margin-bottom: 5px;
+}
+
+.pagination-wrapper {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
 }
 </style>

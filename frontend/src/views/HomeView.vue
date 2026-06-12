@@ -105,7 +105,7 @@
     <div class="card memory-plan-card" style="margin-top: 20px;">
       <div class="memory-plan-header">
         <h3>记忆规划数据</h3>
-        <el-button type="primary" text @click="$router.push('/memory-plan')">
+        <el-button type="primary" text @click="$router.push('/memory/plan')">
           查看详情 <el-icon><ArrowRight /></el-icon>
         </el-button>
       </div>
