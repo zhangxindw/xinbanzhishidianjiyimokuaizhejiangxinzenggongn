@@ -967,6 +967,12 @@ def handle_wrong_questions():
                 query = query.filter(WrongQuestion.wrong_count == 5)
             elif wrong_count_eq == 7:
                 query = query.filter(WrongQuestion.wrong_count > 5)
+            elif wrong_count_eq == 8:
+                query = query.filter(WrongQuestion.wrong_count >= 2)
+            elif wrong_count_eq == 9:
+                query = query.filter(WrongQuestion.wrong_count >= 3)
+            elif wrong_count_eq == 10:
+                query = query.filter(WrongQuestion.wrong_count >= 4)
             else:
                 query = query.filter(WrongQuestion.wrong_count == wrong_count_eq)
         if min_reappearance_count is not None:

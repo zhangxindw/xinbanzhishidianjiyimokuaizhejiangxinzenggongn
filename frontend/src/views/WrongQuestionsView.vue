@@ -62,8 +62,11 @@
         <el-select v-model="filters.wrong_count_eq" placeholder="错误次数" style="min-width: 100px; flex: 1; max-width: 130px;" clearable @change="loadWrongQuestions">
           <el-option label="全部" :value="undefined" />
           <el-option label="=1" :value="1" />
+          <el-option label="≥2" :value="8" />
           <el-option label="=2" :value="2" />
+          <el-option label="≥3" :value="9" />
           <el-option label="=3" :value="3" />
+          <el-option label="≥4" :value="10" />
           <el-option label="＞3" :value="4" />
           <el-option label="=4" :value="5" />
           <el-option label="=5" :value="6" />
