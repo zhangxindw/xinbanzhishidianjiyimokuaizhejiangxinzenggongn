@@ -1,5 +1,9 @@
 <template>
-  <div class="app-container" :class="eyeProtectionClass">
+  <!-- 手机端布局 -->
+  <MobileLayout v-if="$route.meta.mobile" />
+  
+  <!-- 电脑端布局 -->
+  <div v-else class="app-container" :class="eyeProtectionClass">
     <div class="main-layout">
       <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
         <div class="sidebar-logo">
@@ -31,7 +35,7 @@
             <el-icon><Collection /></el-icon>
             <span v-if="!sidebarCollapsed">题型管理</span>
           </li>
-          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/practice') }" @click="showPracticeMenu = !showPracticeMenu">
+          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/practice') && !$route.path.includes('/mobile') }" @click="showPracticeMenu = !showPracticeMenu">
             <el-icon><Reading /></el-icon>
             <span v-if="!sidebarCollapsed">刷题练习</span>
             <el-icon v-if="!sidebarCollapsed"><ArrowDown v-if="!showPracticeMenu" /><ArrowUp v-else /></el-icon>
@@ -54,7 +58,7 @@
               错题练习
             </div>
           </li>
-          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/memory') }" @click="showMemoryMenu = !showMemoryMenu">
+          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/memory') && !$route.path.includes('/mobile') }" @click="showMemoryMenu = !showMemoryMenu">
             <el-icon><Star /></el-icon>
             <span v-if="!sidebarCollapsed">记忆模块</span>
             <el-icon v-if="!sidebarCollapsed"><ArrowDown v-if="!showMemoryMenu" /><ArrowUp v-else /></el-icon>
@@ -89,13 +93,13 @@
             <el-icon><DataAnalysis /></el-icon>
             <span v-if="!sidebarCollapsed">数据统计</span>
           </li>
-          <li class="sidebar-menu-item" :class="{ active: $route.path === '/mobile' }" @click="$router.push('/mobile')">
-            <el-icon><Monitor /></el-icon>
-            <span v-if="!sidebarCollapsed">手机端显示</span>
-          </li>
           <li class="sidebar-menu-item" :class="{ active: $route.path === '/settings' }" @click="$router.push('/settings')">
             <el-icon><Setting /></el-icon>
             <span v-if="!sidebarCollapsed">设置</span>
+          </li>
+          <li class="sidebar-menu-item mobile-entry" :class="{ active: $route.path.startsWith('/mobile') }" @click="$router.push('/mobile')">
+            <el-icon><Iphone /></el-icon>
+            <span v-if="!sidebarCollapsed">手机端</span>
           </li>
         </ul>
         <div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
@@ -112,11 +116,12 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useQuizStore } from '@/store/quiz'
+import MobileLayout from '@/layouts/MobileLayout.vue'
 import { 
   HomeFilled, Document, Upload, Folder, Collection, Reading, Memo, 
   Sort, RefreshRight, WarnTriangleFilled, CircleClose, Star, 
   DataAnalysis, Setting, DArrowLeft, DArrowRight, ArrowDown, ArrowUp,
-  Calendar, EditPen, Monitor
+  Calendar, EditPen, Iphone
 } from '@element-plus/icons-vue'
 
 const store = useQuizStore()
@@ -195,5 +200,20 @@ onMounted(async () => {
 .sidebar-toggle .el-icon {
   color: white;
   font-size: 18px;
+}
+
+.mobile-entry {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  margin-top: 10px;
+  border-radius: 8px;
+}
+
+.mobile-entry:hover {
+  opacity: 0.9;
+}
+
+.mobile-entry .el-icon {
+  color: white;
 }
 </style>

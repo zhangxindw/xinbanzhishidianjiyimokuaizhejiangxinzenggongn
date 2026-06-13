@@ -1031,6 +1031,36 @@ def batch_remove_wrong_questions():
         'message': f'Removed {deleted_count} questions from wrong questions book'
     })
 
+@app.route('/api/wrong-questions/stats', methods=['GET'])
+def wrong_questions_stats():
+    user_id = request.args.get('user_id', 'default_user')
+    
+    # 获取总错题数
+    total = WrongQuestion.query.filter_by(user_id=user_id).count()
+    
+    # 获取各章节错题统计
+    chapter_stats = db.session.query(
+        Question.chapter_id,
+        db.func.count(WrongQuestion.id).label('count')
+    ).join(
+        Question, WrongQuestion.question_id == Question.id
+    ).filter(
+        WrongQuestion.user_id == user_id,
+        Question.chapter_id.isnot(None)
+    ).group_by(
+        Question.chapter_id
+    ).all()
+    
+    chapter_stats_dict = {stat.chapter_id: stat.count for stat in chapter_stats}
+    
+    return jsonify({
+        'status': 'ok',
+        'data': {
+            'total': total,
+            'chapter_stats': chapter_stats_dict
+        }
+    })
+
 @app.route('/api/wrong-questions/practice', methods=['POST'])
 def practice_wrong_questions():
     user_id = request.json.get('user_id', 'default_user')

@@ -10,6 +10,26 @@ const routes = [
     name: 'Home',
     component: () => import('@/views/HomeView.vue')
   },
+  // ========== 手机端模块路由 ==========
+  {
+    path: '/mobile',
+    name: 'MobileHome',
+    component: () => import('@/views/mobile/MobileHomeView.vue'),
+    meta: { mobile: true }
+  },
+  {
+    path: '/mobile/practice/:mode',
+    name: 'MobilePractice',
+    component: () => import('@/views/mobile/MobilePracticeView.vue'),
+    meta: { mobile: true }
+  },
+  {
+    path: '/mobile/memory/practice',
+    name: 'MobileMemoryPractice',
+    component: () => import('@/views/mobile/MobileMemoryPracticeView.vue'),
+    meta: { mobile: true }
+  },
+  // ========== 电脑端原有路由 ==========
   {
     path: '/questions',
     name: 'Questions',
@@ -104,22 +124,6 @@ const routes = [
     path: '/memory/dictation',
     name: 'MemoryDictation',
     component: () => import('@/views/DictationPracticeView.vue')
-  },
-  // ========== 手机端显示模块路由 ==========
-  {
-    path: '/mobile',
-    name: 'Mobile',
-    component: () => import('@/views/MobileView.vue')
-  },
-  {
-    path: '/mobile/practice/:type',
-    name: 'MobilePractice',
-    component: () => import('@/views/MobilePracticeView.vue')
-  },
-  {
-    path: '/mobile/memory/practice',
-    name: 'MobileMemory',
-    component: () => import('@/views/MobileMemoryView.vue')
   }
 ]
 
