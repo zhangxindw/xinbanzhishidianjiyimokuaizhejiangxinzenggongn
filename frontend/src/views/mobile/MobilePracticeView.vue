@@ -183,71 +183,122 @@
           <div class="option-label">{{ option.label }}</div>
           <div class="option-text" v-html="option.text"></div>
           <div v-if="showAnswer && option.label === currentQuestion.answer" class="option-icon correct">
-            <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M557.248 314.88 384 488.128l-90.496-90.496a32 32 0 0 0-45.248 45.248l121.248 121.248a32 32 0 0 0 45.248 0L557.248 360.128a32 32 0 0 0 0-45.248z"></path></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
           </div>
           <div v-if="showAnswer && selectedOption === option.label && option.label !== currentQuestion.answer" class="option-icon wrong">
-            <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M557.248 314.88 384 488.128l-90.496-90.496a32 32 0 0 0-45.248 45.248l121.248 121.248a32 32 0 0 0 45.248 0L557.248 360.128a32 32 0 0 0 0-45.248z"></path></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
           </div>
         </div>
       </div>
 
-      <!-- 答案显示 -->
-      <div v-if="showAnswer" class="answer-section">
+      <!-- 答案和下一题同一行显示 -->
+      <div v-if="showAnswer" class="answer-row">
         <div class="answer-card">
           <div class="answer-header">
             <span class="answer-badge">正确答案</span>
             <span class="answer-value">{{ currentQuestion.answer }}</span>
           </div>
         </div>
-        <div v-if="currentQuestion.explanation || currentQuestion.explanation_html" class="explanation-card">
-          <div class="explanation-header">
-            <svg class="explanation-icon" viewBox="0 0 1024 1024"><path fill="currentColor" d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768m0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896"></path></svg>
-            <span>解析</span>
-          </div>
-          <div class="explanation-text" v-html="currentQuestion.explanation_html || currentQuestion.explanation"></div>
-        </div>
-      </div>
-
-      <!-- 操作按钮 -->
-      <div class="action-buttons">
-        <button v-if="!showAnswer" class="submit-btn" @click="submitAnswer" :disabled="!selectedOption">
-          提交答案
-        </button>
-        <button v-if="showAnswer" class="next-btn" @click="nextQuestion">
+        <button class="next-btn" @click="nextQuestion">
           {{ currentIndex < questions.length - 1 ? '下一题' : '完成练习' }}
           <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M716.8 537.6a12.8 12.8 0 0 1 0 17.92L332.8 940.8a12.8 12.8 0 0 1-17.92-17.92l371.2-371.2-371.2-371.2a12.8 12.8 0 1 1 17.92-17.92z"></path></svg>
+        </button>
+      </div>
+
+      <!-- 解析 -->
+      <div v-if="showAnswer && (currentQuestion.explanation || currentQuestion.explanation_html)" class="explanation-card" style="margin-top: 12px;">
+        <div class="explanation-header">
+          <svg class="explanation-icon" viewBox="0 0 1024 1024"><path fill="currentColor" d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768m0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896"></path></svg>
+          <span>解析</span>
+        </div>
+        <div class="explanation-text" v-html="currentQuestion.explanation_html || currentQuestion.explanation"></div>
+      </div>
+
+      <!-- 提交答案按钮 -->
+      <div v-if="!showAnswer" class="action-buttons">
+        <button class="submit-btn" @click="submitAnswer" :disabled="!selectedOption">
+          提交答案
         </button>
       </div>
     </div>
 
     <!-- 完成界面 -->
     <div v-if="practiceStarted && !currentQuestion" class="complete-screen">
-      <div class="complete-card">
-        <div class="complete-icon">
-          <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M512 864a256 256 0 1 0 0-512 256 256 0 0 0 0 512zm0 64a320 320 0 1 1 0-640 320 320 0 0 1 0 640z"></path><path fill="currentColor" d="M384 512a32 32 0 0 1 32-32h192a32 32 0 0 1 32 32v192a32 32 0 0 1-32 32H416a32 32 0 0 1-32-32V512z"></path></svg>
+      <div class="result-dialog">
+        <!-- 顶部渐变背景 -->
+        <div class="result-header" :style="{ background: `linear-gradient(135deg, ${modeColors[practiceMode] || '#667eea'} 0%, ${modeColors[practiceMode] || '#667eea'}dd 100%)` }">
+          <div class="result-icon">{{ gradeIcon }}</div>
+          <div class="result-title">练习完成</div>
         </div>
-        <h2>练习完成</h2>
-        <div class="complete-stats">
-          <div class="stat-item">
-            <span class="stat-value">{{ questions.length }}</span>
-            <span class="stat-label">总题数</span>
+
+        <!-- 内容区域 -->
+        <div class="result-content">
+          <!-- 正确率圆环 -->
+          <div class="accuracy-display">
+            <svg width="120" height="120" style="transform: rotate(-90deg);">
+              <circle cx="60" cy="60" r="52" stroke="#e5e7eb" stroke-width="8" fill="none"/>
+              <circle cx="60" cy="60" r="52" :stroke="gradeColor" stroke-width="8" fill="none"
+                :stroke-dasharray="2 * Math.PI * 52"
+                :stroke-dashoffset="2 * Math.PI * 52 * (1 - accuracy / 100)"
+                style="transition: stroke-dashoffset 1s ease-out; stroke-linecap: round;"/>
+            </svg>
+            <div class="accuracy-text">
+              <div class="accuracy-value">{{ accuracy }}%</div>
+              <div class="accuracy-label">正确率</div>
+            </div>
           </div>
-          <div class="stat-item">
-            <span class="stat-value correct">{{ correctCount }}</span>
-            <span class="stat-label">正确</span>
+
+          <!-- 等级徽章 -->
+          <div class="grade-badge" :style="{ background: gradeBgColor, color: gradeColor }">
+            {{ grade }}
           </div>
-          <div class="stat-item">
-            <span class="stat-value wrong">{{ questions.length - correctCount }}</span>
-            <span class="stat-label">错误</span>
+
+          <!-- 统计数据网格 -->
+          <div class="stats-grid">
+            <div class="stat-card stat-total">
+              <div class="stat-value">{{ totalQuestionsCount }}</div>
+              <div class="stat-label">总题数</div>
+            </div>
+            <div class="stat-card stat-correct">
+              <div class="stat-value">{{ finalCorrectCount }}</div>
+              <div class="stat-label">正确</div>
+            </div>
+            <div class="stat-card stat-wrong">
+              <div class="stat-value">{{ totalQuestionsCount - finalCorrectCount }}</div>
+              <div class="stat-label">错误</div>
+            </div>
+            <div class="stat-card stat-skipped">
+              <div class="stat-value">0</div>
+              <div class="stat-label">跳过</div>
+            </div>
+          </div>
+
+          <!-- 温馨提示 -->
+          <div class="tip-card" :style="{ borderLeftColor: gradeColor }">
+            <div class="tip-header">
+              <span class="tip-icon">💡</span>
+              <span class="tip-title" :style="{ color: gradeColor }">温馨提示</span>
+            </div>
+            <div class="tip-content">{{ encouragement }}</div>
+          </div>
+
+          <!-- 模式信息 -->
+          <div class="mode-info" :style="{ borderLeftColor: modeColors[practiceMode] || '#667eea' }">
+            <div class="mode-label">
+              <span class="mode-icon">📝</span>
+              <span>练习模式</span>
+            </div>
+            <span class="mode-name" :style="{ color: modeColors[practiceMode] || '#667eea' }">{{ modeNames[practiceMode] || '练习' }}</span>
           </div>
         </div>
-        <div class="complete-rate">
-          <div class="rate-circle">
-            <span class="rate-value">{{ Math.round(correctCount / questions.length * 100) }}%</span>
-          </div>
-          <span class="rate-label">正确率</span>
-        </div>
-        <div class="complete-actions">
+
+        <!-- 操作按钮 -->
+        <div class="result-actions">
           <button class="restart-btn" @click="restartPractice">再来一次</button>
           <button class="home-btn" @click="goHome">返回首页</button>
         </div>
@@ -277,6 +328,71 @@ const modeTitle = computed(() => {
   return titles[practiceMode.value] || '刷题练习'
 })
 
+// 模式颜色
+const modeColors = {
+  sequential: '#06b6d4',
+  random: '#f59e0b',
+  wrong: '#ef4444'
+}
+
+// 模式名称
+const modeNames = {
+  sequential: '顺序刷题',
+  random: '随机出题',
+  wrong: '错题练习'
+}
+
+// 计算正确率
+const accuracy = computed(() => {
+  if (totalQuestionsCount.value === 0) return 0
+  return Math.round(finalCorrectCount.value / totalQuestionsCount.value * 100)
+})
+
+// 计算等级
+const grade = computed(() => {
+  const acc = accuracy.value
+  if (acc >= 90) return '优秀'
+  if (acc >= 70) return '良好'
+  if (acc >= 60) return '及格'
+  return '继续努力'
+})
+
+// 等级图标
+const gradeIcon = computed(() => {
+  const acc = accuracy.value
+  if (acc >= 90) return '🏆'
+  if (acc >= 70) return '🌟'
+  if (acc >= 60) return '👍'
+  return '💪'
+})
+
+// 等级颜色
+const gradeColor = computed(() => {
+  const acc = accuracy.value
+  if (acc >= 90) return '#10b981'
+  if (acc >= 70) return '#f59e0b'
+  if (acc >= 60) return '#6366f1'
+  return '#ef4444'
+})
+
+// 等级背景色
+const gradeBgColor = computed(() => {
+  const acc = accuracy.value
+  if (acc >= 90) return 'rgba(16, 185, 129, 0.1)'
+  if (acc >= 70) return 'rgba(245, 158, 11, 0.1)'
+  if (acc >= 60) return 'rgba(99, 102, 241, 0.1)'
+  return 'rgba(239, 68, 68, 0.1)'
+})
+
+// 鼓励语
+const encouragement = computed(() => {
+  const acc = accuracy.value
+  if (acc >= 90) return '太棒了！继续保持！你的表现非常出色！🎉'
+  if (acc >= 70) return '做得不错！再接再厉，你还可以更好！💪'
+  if (acc >= 60) return '及格了，不要骄傲，继续保持学习的状态！📚'
+  return '别灰心，多做练习一定能进步！坚持就是胜利！💪'
+})
+
 const chapters = ref([])
 const selectedChapterIds = ref([])
 const wrongCount = ref(0)
@@ -302,6 +418,9 @@ const selectedOption = ref('')
 const showAnswer = ref(false)
 const practiceStarted = ref(false)
 const correctCount = ref(0)
+// 保存完成时的统计数据
+const totalQuestionsCount = ref(0)
+const finalCorrectCount = ref(0)
 
 const previewCount = computed(() => {
   if (practiceMode.value === 'random') {
@@ -446,7 +565,12 @@ const nextQuestion = () => {
     currentIndex.value++
     selectedOption.value = ''
     showAnswer.value = false
+    // 滚动到页面顶部
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   } else {
+    // 保存完成时的统计数据
+    totalQuestionsCount.value = questions.value.length
+    finalCorrectCount.value = correctCount.value
     questions.value = []
   }
 }
@@ -458,6 +582,8 @@ const restartPractice = () => {
   selectedOption.value = ''
   showAnswer.value = false
   correctCount.value = 0
+  totalQuestionsCount.value = 0
+  finalCorrectCount.value = 0
 }
 
 const goBack = () => {
@@ -1145,8 +1271,8 @@ onMounted(async () => {
 }
 
 .option-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
 }
 
 /* 答案显示 */
@@ -1158,8 +1284,9 @@ onMounted(async () => {
   background: #f0fff4;
   border: 1px solid #b7eb8f;
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
+  padding: 14px 12px;
+  margin-bottom: 0;
+  min-width: 0;
 }
 
 .answer-header {
@@ -1178,7 +1305,7 @@ onMounted(async () => {
 }
 
 .answer-value {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
   color: #52c41a;
 }
@@ -1252,6 +1379,36 @@ onMounted(async () => {
   padding: 0 4px;
 }
 
+/* 答案和下一题同一行 */
+.answer-row {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.answer-row .answer-card {
+  flex: 1;
+  margin-bottom: 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.answer-row .answer-card .answer-header {
+  width: 100%;
+}
+
+.answer-row .next-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 14px 12px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* 操作按钮 */
 .action-buttons {
   margin-top: 20px;
@@ -1310,114 +1467,226 @@ onMounted(async () => {
 
 /* 完成界面 */
 .complete-screen {
-  padding: 24px 16px;
+  padding: 16px;
+  min-height: calc(100vh - 100px);
   display: flex;
-  justify-content: center;
+  flex-direction: column;
   align-items: center;
-  min-height: 70vh;
+  justify-content: flex-start;
 }
 
-.complete-card {
+.result-dialog {
+  width: 100%;
+  max-width: 420px;
   background: white;
   border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.result-header {
   padding: 32px 24px;
   text-align: center;
-  width: 100%;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+  color: white;
 }
 
-.complete-icon {
-  width: 80px;
-  height: 80px;
-  background: linear-gradient(135deg, #52c41a 0%, #73d13d 100%);
-  border-radius: 50%;
+.result-icon {
+  font-size: 56px;
+  margin-bottom: 12px;
+  animation: bounce 1s ease infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+.result-title {
+  font-size: 18px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.result-content {
+  padding: 24px;
+}
+
+.accuracy-display {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 20px;
+  text-align: center;
+  width: 100%;
+}
+
+.accuracy-display svg {
+  display: block;
+  margin: 0 auto;
+}
+
+.accuracy-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.accuracy-value {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.accuracy-label {
+  font-size: 12px;
+  color: #6b7280;
+  margin-top: 4px;
+}
+
+.grade-badge {
+  display: inline-block;
+  padding: 8px 24px;
+  border-radius: 50px;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 auto 20px;
+  display: block;
+  text-align: center;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  padding: 12px 6px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.stat-card .stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.stat-card .stat-label {
+  font-size: 10px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.stat-total {
+  background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+  border: 1px solid #bae6fd;
+}
+.stat-total .stat-value {
+  color: #4f46e5;
+}
+
+.stat-correct {
+  background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
+  border: 1px solid #86efac;
+}
+.stat-correct .stat-value {
+  color: #10b981;
+}
+
+.stat-wrong {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border: 1px solid #fca5a5;
+}
+.stat-wrong .stat-value {
+  color: #ef4444;
+}
+
+.stat-skipped {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 1px solid #fcd34d;
+}
+.stat-skipped .stat-value {
+  color: #f59e0b;
+}
+
+.tip-card {
+  background: #f9fafb;
+  border-left: 4px solid;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.tip-header {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin: 0 auto 20px;
-  color: white;
-  box-shadow: 0 8px 24px rgba(82, 196, 26, 0.3);
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
-.complete-icon svg {
-  width: 40px;
-  height: 40px;
+.tip-icon {
+  font-size: 16px;
 }
 
-.complete-card h2 {
-  font-size: 24px;
-  margin: 0 0 24px;
-  color: #1a1a1a;
+.tip-title {
+  font-size: 13px;
   font-weight: 600;
 }
 
-.complete-stats {
-  display: flex;
-  justify-content: space-around;
-  margin-bottom: 24px;
-  padding: 16px 0;
-  border-top: 1px solid #f0f0f0;
-  border-bottom: 1px solid #f0f0f0;
+.tip-content {
+  font-size: 13px;
+  color: #4b5563;
+  line-height: 1.6;
 }
 
-.stat-item {
-  text-align: center;
-}
-
-.stat-value {
-  font-size: 28px;
-  font-weight: 700;
-  color: #1a1a1a;
-  display: block;
-}
-
-.stat-value.correct {
-  color: #52c41a;
-}
-
-.stat-value.wrong {
-  color: #ff4d4f;
-}
-
-.stat-label {
-  font-size: 12px;
-  color: #8c8c8c;
-  margin-top: 4px;
-  display: block;
-}
-
-.complete-rate {
-  margin: 24px 0;
-}
-
-.rate-circle {
-  width: 100px;
-  height: 100px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.mode-info {
+  background: #f9fafb;
+  border-left: 4px solid;
+  border-radius: 10px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin: 0 auto 12px;
-  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.3);
+  justify-content: space-between;
 }
 
-.rate-value {
-  font-size: 24px;
+.mode-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+}
+
+.mode-icon {
+  font-size: 16px;
+}
+
+.mode-name {
+  font-size: 13px;
   font-weight: 700;
-  color: white;
 }
 
-.rate-label {
-  font-size: 14px;
-  color: #8c8c8c;
-}
-
-.complete-actions {
+.result-actions {
+  padding: 0 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  margin-top: 24px;
+  gap: 10px;
 }
 
 .restart-btn {
