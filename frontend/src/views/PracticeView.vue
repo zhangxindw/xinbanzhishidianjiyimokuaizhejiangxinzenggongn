@@ -800,6 +800,7 @@ const isMastered = computed(() => {
 
 const selectOption = async (label) => {
   if (practiceMode.value === 'memorize' || showAnswer.value) return
+  if (!currentQuestion.value) return
 
   answeredQuestions.value[currentIndex.value] = label
   showAnswer.value = true
@@ -845,6 +846,10 @@ const resetQuestionState = () => {
 }
 
 const startPractice = async () => {
+  if (practiceStarted.value && questions.value.length > 0) {
+    return
+  }
+  
   try {
     // 先尝试恢复保存的状态
     const restored = await restoreSavedState()

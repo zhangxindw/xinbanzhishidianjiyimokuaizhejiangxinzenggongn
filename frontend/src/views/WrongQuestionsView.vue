@@ -322,28 +322,14 @@ const batchPractice = async () => {
 
   try {
     const wrongIds = selectedWrongQuestions.value.map(wq => wq.id)
-    console.log('DEBUG batchPractice: calling API with wrong_ids:', wrongIds)
-
-    const res = await axios.post('/api/wrong-questions/practice', {
-      user_id: store.userId,
-      shuffle: false,
-      wrong_ids: wrongIds
-    })
-    const result = res.data
-    console.log('DEBUG batchPractice: API result:', result)
-
-    if (!result || !result.data || result.data.length === 0) {
-      ElMessage.warning('选中的题目不存在或已被移除')
-      return
-    }
-
+    
     store.clearSavedPracticeSession('wrong')
-    ElMessage.success(`已加载 ${result.data.length} 道错题准备练习`)
+    ElMessage.success(`已准备 ${wrongIds.length} 道错题练习`)
     router.push({
       path: '/practice/wrong',
       query: {
         mode: 'wrong_selected',
-        sessionId: result.session_id,
+        sessionId: Date.now().toString(),
         wrongIds: JSON.stringify(wrongIds)
       }
     })

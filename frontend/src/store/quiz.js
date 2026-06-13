@@ -267,7 +267,10 @@ export const useQuizStore = defineStore('quiz', {
     },
 
     async submitAnswer(questionId, userAnswer, expectedAnswer = null) {
-      const session_id = typeof this.currentSession === 'object' ? this.currentSession.id : this.currentSession
+      let session_id = this.userId
+      if (this.currentSession) {
+        session_id = typeof this.currentSession === 'object' ? this.currentSession.id : this.currentSession
+      }
       const payload = {
         session_id: session_id || this.userId,
         question_id: questionId,

@@ -1038,31 +1038,25 @@ def practice_wrong_questions():
     shuffle_options = request.json.get('shuffle_options', True)
     chapter_ids = request.json.get('chapter_ids', [])
     wrong_ids = request.json.get('wrong_ids', [])
-    
-    print(f"DEBUG - user_id: {user_id}")
-    print(f"DEBUG - chapter_ids: {chapter_ids}")
-    print(f"DEBUG - wrong_ids: {wrong_ids}")
-    print(f"DEBUG - shuffle_options: {shuffle_options}")
+    increment_reappearance = request.json.get('increment_reappearance', True)
 
     query = WrongQuestion.query.filter_by(user_id=user_id)
     
     if chapter_ids and len(chapter_ids) > 0:
-        print(f"DEBUG - Filtering by chapters: {chapter_ids}")
         query = query.join(Question).filter(Question.chapter_id.in_(chapter_ids))
     
     if wrong_ids and len(wrong_ids) > 0:
-        print(f"DEBUG - Filtering by wrong_ids: {wrong_ids}")
         query = query.filter(WrongQuestion.id.in_(wrong_ids))
     
     wrong_questions = query.all()
-    print(f"DEBUG - Found {len(wrong_questions)} wrong questions")
     
     if not wrong_questions:
         return jsonify({'status': 'ok', 'data': [], 'session_id': str(uuid.uuid4())})
 
-    for wq in wrong_questions:
-        wq.reappearance_count += 1
-    db.session.commit()
+    if increment_reappearance:
+        for wq in wrong_questions:
+            wq.reappearance_count += 1
+        db.session.commit()
 
     questions = [wq.question for wq in wrong_questions if wq.question]
     if shuffle:
