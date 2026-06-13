@@ -89,6 +89,10 @@
             <el-icon><DataAnalysis /></el-icon>
             <span v-if="!sidebarCollapsed">数据统计</span>
           </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/mobile' }" @click="$router.push('/mobile')">
+            <el-icon><Monitor /></el-icon>
+            <span v-if="!sidebarCollapsed">手机端显示</span>
+          </li>
           <li class="sidebar-menu-item" :class="{ active: $route.path === '/settings' }" @click="$router.push('/settings')">
             <el-icon><Setting /></el-icon>
             <span v-if="!sidebarCollapsed">设置</span>
@@ -112,7 +116,7 @@ import {
   HomeFilled, Document, Upload, Folder, Collection, Reading, Memo, 
   Sort, RefreshRight, WarnTriangleFilled, CircleClose, Star, 
   DataAnalysis, Setting, DArrowLeft, DArrowRight, ArrowDown, ArrowUp,
-  Calendar, EditPen
+  Calendar, EditPen, Monitor
 } from '@element-plus/icons-vue'
 
 const store = useQuizStore()

@@ -104,6 +104,22 @@ const routes = [
     path: '/memory/dictation',
     name: 'MemoryDictation',
     component: () => import('@/views/DictationPracticeView.vue')
+  },
+  // ========== 手机端显示模块路由 ==========
+  {
+    path: '/mobile',
+    name: 'Mobile',
+    component: () => import('@/views/MobileView.vue')
+  },
+  {
+    path: '/mobile/practice/:type',
+    name: 'MobilePractice',
+    component: () => import('@/views/MobilePracticeView.vue')
+  },
+  {
+    path: '/mobile/memory/practice',
+    name: 'MobileMemory',
+    component: () => import('@/views/MobileMemoryView.vue')
   }
 ]
 
