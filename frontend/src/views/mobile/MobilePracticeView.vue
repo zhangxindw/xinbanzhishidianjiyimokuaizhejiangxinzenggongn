@@ -226,7 +226,6 @@
         </button>
       </div>
     </div>
-
     <!-- 完成界面 -->
     <div v-if="practiceStarted && !currentQuestion" class="complete-screen">
       <div class="result-dialog">
@@ -634,19 +633,26 @@ onMounted(async () => {
   min-height: 100vh;
   background: linear-gradient(180deg, #f8fafc 0%, #e8f4f8 100%);
   padding-bottom: 24px;
+  padding-top: 66px;
 }
 
 /* 顶部标题栏 */
 .mobile-header {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 12px 16px 20px;
-  position: relative;
+  padding: 12px 16px 12px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
   overflow: hidden;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+  box-shadow: 0 2px 12px rgba(102, 126, 234, 0.2);
+  height: 56px;
 }
 
 .header-bg {

@@ -365,6 +365,8 @@ onMounted(async () => {
 .mobile-memory-practice {
   min-height: 100vh;
   background: #f5f5f5;
+  padding-bottom: 24px;
+  padding-top: 66px;
 }
 
 .mobile-header {
@@ -374,6 +376,12 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  height: 56px;
 }
 
 .back-btn {

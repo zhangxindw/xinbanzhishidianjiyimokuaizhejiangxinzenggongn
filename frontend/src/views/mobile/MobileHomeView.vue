@@ -129,32 +129,7 @@
     </div>
 
     <!-- 底部导航 -->
-    <nav class="mobile-nav">
-      <div class="nav-item active" @click="goToHome">
-        <div class="nav-icon">
-          <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M512 512V128h320v384H512zm-192 0H128V128h192v384zm192 384V576h320v320H512zm-192 0V576H128v320h192z"></path></svg>
-        </div>
-        <span>首页</span>
-      </div>
-      <div class="nav-item" @click="goToSequential">
-        <div class="nav-icon">
-          <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M384 96a32 32 0 0 1 64 0v786.752a32 32 0 0 1-54.592 22.656L95.936 608a32 32 0 0 1 0-45.312h.128a32 32 0 0 1 45.184 0L384 805.632z"></path></svg>
-        </div>
-        <span>刷题</span>
-      </div>
-      <div class="nav-item" @click="goToWrong">
-        <div class="nav-icon">
-          <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M928.99 755.83 574.6 203.25c-12.89-20.16-36.76-32.58-62.6-32.58s-49.71 12.43-62.6 32.58L95.01 755.83c-12.91 20.12-12.9 44.91.01 65.03 12.92 20.12 36.78 32.51 62.59 32.49h708.78c25.82.01 49.68-12.37 62.59-32.49s12.92-44.91.01-65.03"></path></svg>
-        </div>
-        <span>错题</span>
-      </div>
-      <div class="nav-item" @click="goToMemoryPractice">
-        <div class="nav-icon">
-          <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="m512 747.84 228.16 119.936a6.4 6.4 0 0 0 9.28-6.72l-43.52-254.08 184.512-179.904a6.4 6.4 0 0 0-3.52-10.88l-255.104-37.12L517.76 147.904a6.4 6.4 0 0 0-11.52 0L392.192 379.072l-255.104 37.12a6.4 6.4 0 0 0-3.52 10.88L318.08 606.976l-43.584 254.08a6.4 6.4 0 0 0 9.28 6.72z"></path></svg>
-        </div>
-        <span>记忆</span>
-      </div>
-    </nav>
+    <BottomNav />
   </div>
 </template>
 
@@ -163,6 +138,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useQuizStore } from '@/store/quiz'
 import axios from 'axios'
+import BottomNav from '@/components/BottomNav.vue'
 
 const router = useRouter()
 const store = useQuizStore()
@@ -553,57 +529,5 @@ onMounted(async () => {
 
 .memory-module {
   margin-bottom: 16px;
-}
-
-/* 底部导航 */
-.mobile-nav {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: white;
-  display: flex;
-  justify-content: space-around;
-  padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
-  box-shadow: 0 -4px 20px rgba(0,0,0,0.08);
-  z-index: 100;
-}
-
-.nav-item {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  color: #8c8c8c;
-  font-size: 11px;
-  cursor: pointer;
-  transition: color 0.3s;
-  padding: 4px 0;
-}
-
-.nav-item:active {
-  color: #667eea;
-}
-
-.nav-icon {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 2px;
-}
-
-.nav-icon svg {
-  width: 24px;
-  height: 24px;
-}
-
-.nav-item.active {
-  color: #667eea;
-}
-
-.nav-item span {
-  font-weight: 500;
 }
 </style>
