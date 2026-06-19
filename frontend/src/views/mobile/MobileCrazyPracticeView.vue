@@ -82,6 +82,12 @@
 
     <!-- 刷题界面 -->
     <div v-if="practiceStarted && currentQuestion" class="practice-screen" :class="`font-${fontSize}`">
+      <!-- 加载遮罩层，隐藏打乱选项过程 -->
+      <div v-if="isLoading" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">正在处理题目...</div>
+      </div>
+      
       <!-- 题目卡片 -->
       <div class="question-card">
         <div class="question-header">
@@ -108,14 +114,17 @@
       <!-- 答案和解析 -->
       <div v-if="showAnswer" class="answer-row">
         <div class="answer-card">
-          <div class="answer-header">
-            <span class="answer-badge">正确答案</span>
-            <span class="answer-value">{{ currentQuestion.answer }}</span>
-          </div>
-          <div class="status-info">
-            <span v-if="currentQuestionStatus.correctCount === 1" class="status-badge pending">已答对1次，还需答对1次</span>
-            <span v-else-if="currentQuestionStatus.completed" class="status-badge completed">已完成</span>
-            <span v-else class="status-badge new">答错，需重新答对2次</span>
+          <div class="answer-main">
+            <div class="answer-header">
+              <span class="answer-badge">正确答案</span>
+              <span class="answer-value">{{ currentQuestion.answer }}</span>
+            </div>
+            <div class="status-info">
+              <span v-if="currentQuestionStatus.isFirstAttempt && !currentQuestionStatus.completed" class="status-badge new">新</span>
+              <span v-else-if="!currentQuestionStatus.isFirstAttempt && currentQuestionStatus.correctCount === 1" class="status-badge pending">1/2</span>
+              <span v-else-if="!currentQuestionStatus.isFirstAttempt && currentQuestionStatus.correctCount === 0 && currentQuestionStatus.wrongCount > 0" class="status-badge wrong">重做</span>
+              <span v-else-if="currentQuestionStatus.completed" class="status-badge completed">✓</span>
+            </div>
           </div>
         </div>
         <button class="next-btn" @click="nextQuestion">
@@ -205,14 +214,24 @@ const selectedOption = ref('')
 const showAnswer = ref(false)
 const practiceStarted = ref(false)
 
+// 加载状态（用于隐藏打乱选项过程）
+const isLoading = ref(false)
+
 // 疯狂刷题状态
 const crazyQuestionStatus = ref({})
 const crazyCompletedCount = ref(0)
 const crazyTotalCount = ref(0)
 
+// 当前题目回答后的待处理动作
+// null: 无待处理动作
+// { action: 'remove' }: 从序列中移除
+// { action: 'reshuffle', insertAfter: 8 }: 打乱后插入到指定位置之后
+const pendingAction = ref(null)
+
 const currentQuestionStatus = computed(() => {
-  if (!currentQuestion.value) return { correctCount: 0, wrongCount: 0, completed: false }
-  return crazyQuestionStatus.value[currentQuestion.value.id] || { correctCount: 0, wrongCount: 0, completed: false }
+  if (!currentQuestion.value) return { correctCount: 0, wrongCount: 0, completed: false, isFirstAttempt: true }
+  const status = crazyQuestionStatus.value[currentQuestion.value.id] || { isFirstAttempt: true, correctCount: 0, wrongCount: 0, completed: false }
+  return status
 })
 
 const toggleChapter = (id) => {
@@ -325,6 +344,7 @@ const startPractice = async () => {
       crazyQuestionStatus.value = {}
       for (const q of questionList) {
         crazyQuestionStatus.value[q.id] = {
+          isFirstAttempt: true,
           correctCount: 0,
           wrongCount: 0,
           completed: false
@@ -355,22 +375,8 @@ const submitAnswer = async () => {
   const status = crazyQuestionStatus.value[questionId]
   const isCorrect = selectedOption.value === currentQuestion.value.answer
   
-  if (isCorrect) {
-    status.correctCount++
-    if (status.correctCount >= 2) {
-      status.completed = true
-      crazyCompletedCount.value++
-    }
-  } else {
-    status.correctCount = 0
-    status.wrongCount++
-    // 答错的题目重新插入队列末尾
-    const questionCopy = JSON.parse(JSON.stringify(currentQuestion.value))
-    if (config.value.shuffleOptions) {
-      shuffleOptions(questionCopy)
-    }
-    questions.value.push(questionCopy)
-  }
+  // 记录答案结果，但不确定具体动作
+  pendingAction.value = { isCorrect, status }
   
   // 提交答案记录
   try {
@@ -380,7 +386,95 @@ const submitAnswer = async () => {
   }
 }
 
-const nextQuestion = () => {
+const nextQuestion = async () => {
+  if (!pendingAction.value) {
+    // 没有待处理动作，直接跳到下一题
+    moveToNextQuestion()
+    return
+  }
+  
+  const { isCorrect, status } = pendingAction.value
+  const currentQ = currentQuestion.value
+  
+  // 回答正确移出序列：不需要加载动画
+  // 回答错误打乱选项：需要加载动画
+  if (!isCorrect) {
+    isLoading.value = true
+    await new Promise(resolve => setTimeout(resolve, 300))
+  }
+  
+  if (isCorrect) {
+    if (status.isFirstAttempt) {
+      // 首次答对 → 直接移出题目序列
+      status.completed = true
+      crazyCompletedCount.value++
+      questions.value.splice(currentIndex.value, 1)
+    } else {
+      // 非首次答对
+      status.correctCount++
+      if (status.correctCount >= 2) {
+        // 连续答对两次 → 移出题目序列
+        status.completed = true
+        crazyCompletedCount.value++
+        questions.value.splice(currentIndex.value, 1)
+      } else {
+        // 第一次答对（在错误状态下），插入到第12题之后
+        const insertPos = Math.min(currentIndex.value + 12, questions.value.length)
+        const questionData = JSON.parse(JSON.stringify(currentQ))
+        if (config.value.shuffleOptions) {
+          shuffleOptions(questionData)
+        }
+        questions.value.splice(currentIndex.value, 1)
+        questions.value.splice(insertPos, 0, questionData)
+        crazyQuestionStatus.value[questionData.id] = {
+          isFirstAttempt: false,
+          correctCount: 1,
+          wrongCount: status.wrongCount,
+          completed: false
+        }
+      }
+    }
+  } else {
+    // 答错：无论首次还是再次答错，都放到第8题之后
+    status.isFirstAttempt = false
+    status.correctCount = 0  // 重置正确计数，需要重新连续答对2次
+    status.wrongCount++
+    
+    const insertPos = Math.min(currentIndex.value + 8, questions.value.length)
+    
+    // 打乱选项后移到第8题之后
+    if (config.value.shuffleOptions) {
+      shuffleOptions(questions.value[currentIndex.value])
+    }
+    const questionData = questions.value.splice(currentIndex.value, 1)[0]
+    questions.value.splice(insertPos, 0, questionData)
+  }
+  
+  // 清除待处理动作
+  pendingAction.value = null
+  
+  // 隐藏加载状态
+  isLoading.value = false
+  
+  // 重置选择状态
+  selectedOption.value = ''
+  showAnswer.value = false
+  
+  // 调整索引
+  if (currentIndex.value >= questions.value.length) {
+    currentIndex.value = 0
+  }
+  
+  // 如果没有题目了，检查是否完成
+  if (questions.value.length === 0 || crazyCompletedCount.value >= crazyTotalCount.value) {
+    // 完成
+    questions.value = []
+  }
+  
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const moveToNextQuestion = () => {
   // 找下一个未完成的题目
   let nextIdx = currentIndex.value + 1
   while (nextIdx < questions.value.length) {
@@ -395,17 +489,14 @@ const nextQuestion = () => {
     nextIdx++
   }
   
-  // 检查是否还有未完成的题目
-  if (crazyCompletedCount.value < crazyTotalCount.value) {
-    // 从头开始找未完成的题目
-    for (let i = 0; i < questions.value.length; i++) {
-      if (!crazyQuestionStatus.value[questions.value[i].id]?.completed) {
-        currentIndex.value = i
-        selectedOption.value = ''
-        showAnswer.value = false
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        return
-      }
+  // 从头开始找未完成的题目
+  for (let i = 0; i < questions.value.length; i++) {
+    if (!crazyQuestionStatus.value[questions.value[i].id]?.completed) {
+      currentIndex.value = i
+      selectedOption.value = ''
+      showAnswer.value = false
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
     }
   }
   
@@ -419,6 +510,8 @@ const restartPractice = () => {
   currentIndex.value = 0
   selectedOption.value = ''
   showAnswer.value = false
+  isLoading.value = false
+  pendingAction.value = null
   crazyQuestionStatus.value = {}
   crazyCompletedCount.value = 0
   crazyTotalCount.value = 0
@@ -477,14 +570,29 @@ onMounted(async () => {
   color: #ec4899;
 }
 
+.answer-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.answer-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .status-info {
-  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .status-badge {
   font-size: 12px;
-  padding: 4px 8px;
+  padding: 2px 8px;
   border-radius: 4px;
+  white-space: nowrap;
 }
 
 .status-badge.pending {
@@ -498,11 +606,50 @@ onMounted(async () => {
 }
 
 .status-badge.new {
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.status-badge.wrong {
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
 
 .stat-completed .stat-value {
   color: #10b981;
+}
+
+/* 加载遮罩层 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.loading-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e5e7eb;
+  border-top-color: #ec4899;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  margin-top: 16px;
+  font-size: 14px;
+  color: #6b7280;
 }
 </style>
