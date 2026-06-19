@@ -403,3 +403,145 @@ class MemoryRecord(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
+
+class DistinguishQuestion(db.Model):
+    """辨析题 - 从刷题中勾选添加，记录各选项正误设定"""
+    __tablename__ = 'distinguish_questions'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(50), nullable=False, default='default_user')
+    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=False)
+    stem = db.Column(db.Text, nullable=True)  # 自定义题干
+    explanation = db.Column(db.Text, nullable=True)  # 自定义解析
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    question = db.relationship('Question', backref='distinguish_questions', lazy='joined')
+    options = db.relationship('DistinguishOption', backref='distinguish_question', cascade='all, delete-orphan', lazy='joined')
+    def to_dict(self):
+        q = self.question
+        # 如果有自定义题干/解析，使用自定义的；否则使用原始题目的
+        return {
+            'id': self.id, 'user_id': self.user_id, 'question_id': self.question_id,
+            'stem': self.stem or (q.stem if q else ''),
+            'question_stem': q.stem if q else '', 'question_stem_html': q.stem_html if q else '',
+            'explanation': self.explanation or (q.explanation if q else ''),
+            'question_explanation': q.explanation if q else '',
+            'chapter_name': q.chapter.name if q and q.chapter else '',
+            'options': [o.to_dict() for o in self.options],
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class DistinguishOption(db.Model):
+    """辨析题选项 - 每个选项的正误设定和纠正表述"""
+    __tablename__ = 'distinguish_options'
+    id = db.Column(db.Integer, primary_key=True)
+    distinguish_question_id = db.Column(db.Integer, db.ForeignKey('distinguish_questions.id'), nullable=False)
+    option_key = db.Column(db.String(1), nullable=False)
+    option_text = db.Column(db.Text, nullable=False)
+    is_correct = db.Column(db.Boolean, default=True)
+    corrected_text = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    def to_dict(self):
+        return {'id': self.id, 'distinguish_question_id': self.distinguish_question_id,
+                'option_key': self.option_key, 'option_text': self.option_text,
+                'is_correct': self.is_correct, 'corrected_text': self.corrected_text,
+                'created_at': self.created_at.isoformat() if self.created_at else None}
+
+class DistinguishRecord(db.Model):
+    """辨析记忆记录（用于艾宾浩斯遗忘曲线调度）"""
+    __tablename__ = 'distinguish_records'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(50), nullable=False, default='default_user')
+    option_id = db.Column(db.Integer, db.ForeignKey('distinguish_options.id'), nullable=False)
+    status = db.Column(db.String(20), default='learning')
+    consecutive_correct = db.Column(db.Integer, default=0)
+    interval_days = db.Column(db.Integer, default=1)
+    next_review_date = db.Column(db.Date, nullable=False)
+    last_review_date = db.Column(db.Date, nullable=True)
+    review_count = db.Column(db.Integer, default=0)
+    learning_repetition = db.Column(db.Integer, default=0)
+    today_consecutive_count = db.Column(db.Integer, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    option = db.relationship('DistinguishOption', backref='records', lazy='joined')
+    def to_dict(self):
+        opt = self.option; dq = opt.distinguish_question if opt else None; q = dq.question if dq else None
+        return {'id': self.id, 'user_id': self.user_id, 'option_id': self.option_id,
+                'option_key': opt.option_key if opt else '', 'option_text': opt.option_text if opt else '',
+                'is_correct': opt.is_correct if opt else True, 'corrected_text': opt.corrected_text if opt else None,
+                'question_stem': q.stem if q else '', 'question_stem_html': q.stem_html if q else '',
+                'question_explanation': q.explanation if q else '',
+                'question_explanation_html': q.explanation_html if q else '',
+                'chapter_name': q.chapter.name if q and q.chapter else '',
+                'status': self.status, 'consecutive_correct': self.consecutive_correct,
+                'interval_days': self.interval_days,
+                'next_review_date': self.next_review_date.isoformat() if self.next_review_date else None,
+                'last_review_date': self.last_review_date.isoformat() if self.last_review_date else None,
+                'review_count': self.review_count, 'learning_repetition': self.learning_repetition,
+                'today_consecutive_count': self.today_consecutive_count,
+                'created_at': self.created_at.isoformat() if self.created_at else None,
+                'updated_at': self.updated_at.isoformat() if self.updated_at else None}
+
+
+class PracticePlanRecord(db.Model):
+    """刷题规划记录 - 引用题库管理的题目进行记忆训练"""
+    __tablename__ = 'practice_plan_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(50), nullable=False, default='default_user')
+    question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=False)
+    status = db.Column(db.String(20), default='learning')  # learning（初学中）、reviewing（复习中）、completed（已完成）
+    consecutive_correct = db.Column(db.Integer, default=0)  # 连续背出次数（复习阶段用）
+    interval_days = db.Column(db.Integer, default=1)  # 当前间隔天数
+    next_review_date = db.Column(db.Date, nullable=False)  # 下次复习日期
+    last_review_date = db.Column(db.Date, nullable=True)  # 上次复习日期
+    review_count = db.Column(db.Integer, default=0)  # 总复习次数
+    # 初学中状态专用字段
+    learning_repetition = db.Column(db.Integer, default=0)  # 还剩多少个题目后出现（0表示立即出现）
+    today_consecutive_count = db.Column(db.Integer, default=0)  # 当天连续"背出了"次数
+    correct_at_learning_count = db.Column(db.Integer, default=0)  # 初学阶段正确次数（需要连续2次才算完成初学）
+    completed = db.Column(db.Boolean, default=False)  # 是否已完成当次刷题任务
+    completed_at = db.Column(db.DateTime, nullable=True)  # 完成时间
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    question = db.relationship('Question', backref='practice_plan_records', lazy='joined')
+
+    def to_dict(self):
+        q = self.question
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'question_id': self.question_id,
+            'status': self.status,
+            'consecutive_correct': self.consecutive_correct,
+            'interval_days': self.interval_days,
+            'next_review_date': self.next_review_date.isoformat() if self.next_review_date else None,
+            'last_review_date': self.last_review_date.isoformat() if self.last_review_date else None,
+            'review_count': self.review_count,
+            'learning_repetition': self.learning_repetition,
+            'today_consecutive_count': self.today_consecutive_count,
+            'correct_at_learning_count': self.correct_at_learning_count,
+            'completed': self.completed,
+            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            # 题目详细信息
+            'stem': q.stem if q else '',
+            'stem_html': q.stem_html if q else '',
+            'option_a': q.option_a if q else '',
+            'option_a_html': q.option_a_html if q else '',
+            'option_b': q.option_b if q else '',
+            'option_b_html': q.option_b_html if q else '',
+            'option_c': q.option_c if q else '',
+            'option_c_html': q.option_c_html if q else '',
+            'option_d': q.option_d if q else '',
+            'option_d_html': q.option_d_html if q else '',
+            'option_e': q.option_e if q else '',
+            'option_e_html': q.option_e_html if q else '',
+            'option_f': q.option_f if q else '',
+            'option_f_html': q.option_f_html if q else '',
+            'answer': q.answer if q else '',
+            'explanation': q.explanation if q else '',
+            'explanation_html': q.explanation_html if q else '',
+            'chapter_name': q.chapter.name if q and q.chapter else '',
+            'question_type_name': q.question_type.name if q and q.question_type else None,
+        }

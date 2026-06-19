@@ -24,9 +24,27 @@ const routes = [
     meta: { mobile: true }
   },
   {
+    path: '/mobile/practice/crazy',
+    name: 'MobileCrazyPractice',
+    component: () => import('@/views/mobile/MobileCrazyPracticeView.vue'),
+    meta: { mobile: true }
+  },
+  {
     path: '/mobile/memory/practice',
     name: 'MobileMemoryPractice',
     component: () => import('@/views/mobile/MobileMemoryPracticeView.vue'),
+    meta: { mobile: true }
+  },
+  {
+    path: '/mobile/memory/practice-memory',
+    name: 'MobilePracticeMemory',
+    component: () => import('@/views/mobile/MobilePracticeMemoryView.vue'),
+    meta: { mobile: true }
+  },
+  {
+    path: '/mobile/memory/distinguish',
+    name: 'MobileDistinguishMemory',
+    component: () => import('@/views/mobile/MobileDistinguishMemoryView.vue'),
     meta: { mobile: true }
   },
   // ========== 电脑端原有路由 ==========
@@ -61,6 +79,12 @@ const routes = [
     component: () => import('@/views/QuestionTypesView.vue')
   },
   {
+    path: '/practice/memory',
+    name: 'PracticeMemory',
+    component: () => import('@/views/PracticeView.vue'),
+    meta: { practiceMode: 'memory' }
+  },
+  {
     path: '/practice/memorize',
     name: 'PracticeMemorize',
     component: () => import('@/views/PracticeView.vue'),
@@ -83,6 +107,12 @@ const routes = [
     name: 'PracticeWrong',
     component: () => import('@/views/PracticeView.vue'),
     meta: { practiceMode: 'wrong' }
+  },
+  {
+    path: '/practice/crazy',
+    name: 'PracticeCrazy',
+    component: () => import('@/views/PracticeView.vue'),
+    meta: { practiceMode: 'crazy' }
   },
   {
     path: '/wrong-questions',
@@ -124,7 +154,36 @@ const routes = [
     path: '/memory/dictation',
     name: 'MemoryDictation',
     component: () => import('@/views/DictationPracticeView.vue')
-  }
+  },
+  // ========== 辨析判断模块路由 ==========
+  {
+    path: '/distinguish/management',
+    name: 'DistinguishManagement',
+    component: () => import('@/views/DistinguishManagementView.vue')
+  },
+  {
+    path: '/distinguish/plan',
+    name: 'DistinguishPlan',
+    component: () => import('@/views/DistinguishPlanView.vue')
+  },
+  {
+    path: '/distinguish/memory',
+    name: 'DistinguishMemory',
+    component: () => import('@/views/DistinguishMemoryView.vue')
+  },
+
+  // ========== 刷题规划模块路由 ==========
+  {
+    path: '/memory/practice/plan',
+    name: 'PracticePlan',
+    component: () => import('@/views/PracticePlanView.vue')
+  },
+  {
+    path: '/memory/practice/practice-memory',
+    name: 'PracticeMemoryStandalone',
+    component: () => import('@/views/PracticeMemoryView.vue')
+  },
+
 ]
 
 const router = createRouter({

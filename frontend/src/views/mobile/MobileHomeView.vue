@@ -103,6 +103,14 @@
           <span class="feature-name">错题练习</span>
           <span class="feature-desc">攻克薄弱环节</span>
         </div>
+        <div class="feature-card crazy" @click="goToCrazy">
+          <div class="feature-bg"></div>
+          <div class="feature-icon">
+            <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M288 671.36v64.128A239.81 239.81 0 0 1 63.744 496.192a240.32 240.32 0 0 1 199.488-236.8 256.128 256.128 0 0 1 487.872-30.976A256.064 256.064 0 0 1 736 734.016v-64.768a192 192 0 0 0 3.328-377.92l-35.2-6.592-12.8-33.408a192.064 192.064 0 0 0-365.952 23.232l-9.92 40.896-41.472 7.04a176.32 176.32 0 0 0-146.24 173.568c0 91.968 70.464 167.36 160.256 175.232z"></path><path fill="currentColor" d="M416 736a32 32 0 0 1-27.776-47.872l128-224a32 32 0 1 1 55.552 31.744L471.168 672H608a32 32 0 0 1 27.776 47.872l-128 224a32 32 0 1 1-55.68-31.744L552.96 736z"></path></svg>
+          </div>
+          <span class="feature-name">疯狂刷题</span>
+          <span class="feature-desc">连续答对通关</span>
+        </div>
       </div>
     </div>
 
@@ -111,7 +119,7 @@
         <svg class="heading-icon" viewBox="0 0 1024 1024"><path fill="currentColor" d="m512 747.84 228.16 119.936a6.4 6.4 0 0 0 9.28-6.72l-43.52-254.08 184.512-179.904a6.4 6.4 0 0 0-3.52-10.88l-255.104-37.12L517.76 147.904a6.4 6.4 0 0 0-11.52 0L392.192 379.072l-255.104 37.12a6.4 6.4 0 0 0-3.52 10.88L318.08 606.976l-43.584 254.08a6.4 6.4 0 0 0 9.28 6.72z"></path></svg>
         记忆模块
       </h3>
-      <div class="feature-grid single">
+      <div class="feature-grid">
         <div class="feature-card memory" @click="goToMemoryPractice">
           <div class="feature-bg"></div>
           <div class="feature-icon">
@@ -124,6 +132,22 @@
           <div class="feature-arrow">
             <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M716.8 537.6a12.8 12.8 0 0 1 0 17.92L332.8 940.8a12.8 12.8 0 0 1-17.92-17.92l371.2-371.2-371.2-371.2a12.8 12.8 0 1 1 17.92-17.92z"></path></svg>
           </div>
+        </div>
+        <div class="feature-card memory-practice" @click="goToPracticeMemory">
+          <div class="feature-bg"></div>
+          <div class="feature-icon">
+            <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="m512 747.84 228.16 119.936a6.4 6.4 0 0 0 9.28-6.72l-43.52-254.08 184.512-179.904a6.4 6.4 0 0 0-3.52-10.88l-255.104-37.12L517.76 147.904a6.4 6.4 0 0 0-11.52 0L392.192 379.072l-255.104 37.12a6.4 6.4 0 0 0-3.52 10.88L318.08 606.976l-43.584 254.08a6.4 6.4 0 0 0 9.28 6.72z"></path></svg>
+          </div>
+          <span class="feature-name">记忆刷题</span>
+          <span class="feature-desc">间隔重复强化记忆</span>
+        </div>
+        <div class="feature-card distinguish" @click="goToDistinguishMemory">
+          <div class="feature-bg"></div>
+          <div class="feature-icon">
+            <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M512 64a448 448 0 1 1 0 896 448 448 0 0 1 0-896m0 832a384 384 0 0 0 0-768 384 384 0 0 0 0 768m48-176a48 48 0 1 1-96 0 48 48 0 0 1 96 0m-48-464a32 32 0 0 1 32 32v288a32 32 0 0 1-64 0V288a32 32 0 0 1 32-32"></path></svg>
+          </div>
+          <span class="feature-name">辨析记忆</span>
+          <span class="feature-desc">辨析题强化记忆</span>
         </div>
       </div>
     </div>
@@ -165,7 +189,10 @@ const goToHome = () => router.push('/mobile')
 const goToSequential = () => router.push('/mobile/practice/sequential')
 const goToRandom = () => router.push('/mobile/practice/random')
 const goToWrong = () => router.push('/mobile/practice/wrong')
+const goToCrazy = () => router.push('/mobile/practice/crazy')
 const goToMemoryPractice = () => router.push('/mobile/memory/practice')
+const goToPracticeMemory = () => router.push('/mobile/memory/practice-memory')
+const goToDistinguishMemory = () => router.push('/mobile/memory/distinguish')
 const goToMemoryPlan = () => router.push('/memory/plan')
 
 onMounted(async () => {
@@ -462,8 +489,20 @@ onMounted(async () => {
   background: linear-gradient(90deg, #fa709a, #fee140);
 }
 
+.feature-card.crazy .feature-bg {
+  background: linear-gradient(90deg, #ec4899, #f43f5e);
+}
+
 .feature-card.memory .feature-bg {
   background: linear-gradient(90deg, #38ef7d, #11998e);
+}
+
+.feature-card.memory-practice .feature-bg {
+  background: linear-gradient(90deg, #667eea, #764ba2);
+}
+
+.feature-card.distinguish .feature-bg {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
 }
 
 .feature-icon {
@@ -493,9 +532,24 @@ onMounted(async () => {
   box-shadow: 0 4px 12px rgba(250, 112, 154, 0.3);
 }
 
+.feature-card.crazy .feature-icon {
+  background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%);
+  box-shadow: 0 4px 12px rgba(236, 72, 153, 0.3);
+}
+
 .feature-card.memory .feature-icon {
   background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
   box-shadow: 0 4px 12px rgba(56, 239, 125, 0.3);
+}
+
+.feature-card.memory-practice .feature-icon {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.feature-card.distinguish .feature-icon {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3);
 }
 
 .feature-name {

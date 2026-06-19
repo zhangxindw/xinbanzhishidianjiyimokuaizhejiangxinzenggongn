@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from flask import Flask, request, jsonify, send_file, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-from models import db, Question, Chapter, QuestionType, WrongQuestion, FavoriteQuestion, UserAnswer, UserPreference, OperationLog, KnowledgePoint, KnowledgePointItem, KnowledgePointRelation, MemoryRecord
+from models import db, Question, Chapter, QuestionType, WrongQuestion, FavoriteQuestion, UserAnswer, UserPreference, OperationLog, KnowledgePoint, KnowledgePointItem, KnowledgePointRelation, MemoryRecord, DistinguishQuestion, DistinguishOption, DistinguishRecord, PracticePlanRecord
 from openpyxl import load_workbook, Workbook
 
 # 获取backend目录的父目录（即项目根目录）
@@ -2037,7 +2037,7 @@ def get_random_knowledge_points():
     })
 
 # 最后添加：为Vue Router历史模式配置catch-all路由
-@app.route('/<path:path>')
+@app.route('/<path:path>', methods=['GET'])
 def catch_all(path):
     # 如果是API请求，让它继续到404
     if path.startswith('api/'):
@@ -2051,6 +2051,744 @@ def catch_all(path):
     
     # 所有其他请求返回index.html，让Vue Router处理路由
     return send_from_directory(app.static_folder, 'index.html')
+
+
+# 注册辨析判断模块 API
+# =========== 辨析判断模块 API ===========
+from flask import Blueprint, request, jsonify
+from models import db, DistinguishQuestion, DistinguishOption, DistinguishRecord
+from datetime import datetime, timedelta
+import random
+
+distinguish_bp = Blueprint("distinguish", __name__, url_prefix="/api/distinguish")
+
+@distinguish_bp.route("/save", methods=["POST"])
+def save_distinguish():
+    """保存辨析题（从刷题勾选弹窗保存）"""
+    user_id = request.args.get("user_id", "default_user")
+    data = request.json
+    question_id = data.get("question_id")
+    options = data.get("options", [])
+    if not question_id:
+        return jsonify({"status": "error", "message": "question_id is required"}), 400
+    dq = DistinguishQuestion(user_id=user_id, question_id=question_id)
+    db.session.add(dq)
+    db.session.flush()
+    for opt in options:
+        record = DistinguishOption(
+            distinguish_question_id=dq.id,
+            option_key=opt.get("key", ""),
+            option_text=opt.get("text", ""),
+            is_correct=opt.get("is_correct", True),
+            corrected_text=opt.get("corrected_text", None)
+        )
+        db.session.add(record)
+    db.session.commit()
+    return jsonify({"status": "ok", "data": dq.to_dict()})
+
+@distinguish_bp.route("/check/<int:question_id>", methods=["GET"])
+def check_distinguish(question_id):
+    """检查题目是否已加入辨析题"""
+    user_id = request.args.get("user_id", "default_user")
+    dq = DistinguishQuestion.query.filter_by(user_id=user_id, question_id=question_id).first()
+    return jsonify({
+        "status": "ok",
+        "exists": dq is not None,
+        "distinguish_id": dq.id if dq else None
+    })
+
+@distinguish_bp.route("/questions", methods=["GET"])
+def list_distinguish():
+    """获取所有辨析题（支持筛选）"""
+    user_id = request.args.get("user_id", "default_user")
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    chapter_id = request.args.get("chapter_id", type=int)
+    in_plan = request.args.get("in_plan")
+    
+    query = DistinguishQuestion.query.filter_by(user_id=user_id)
+    
+    if chapter_id:
+        query = query.join(DistinguishQuestion.question).filter(Question.chapter_id == chapter_id)
+    
+    if in_plan is not None:
+        if in_plan.lower() == "true":
+            plan_ids = [r.distinguish_question_id for r in DistinguishRecord.query.filter_by(user_id=user_id).all()]
+            query = query.filter(DistinguishQuestion.id.in_(plan_ids))
+        elif in_plan.lower() == "false":
+            plan_ids = [r.distinguish_question_id for r in DistinguishRecord.query.filter_by(user_id=user_id).all()]
+            query = query.filter(DistinguishQuestion.id.not_in(plan_ids))
+    
+    pagination = query.order_by(DistinguishQuestion.created_at.desc()).paginate(page=page, per_page=per_page, error_out=False)
+    return jsonify({"status": "ok", "data": [q.to_dict() for q in pagination.items], "total": pagination.total, "pages": pagination.pages, "page": page})
+
+@distinguish_bp.route("/questions/<int:qid>", methods=["DELETE", "PUT"])
+def handle_distinguish_single(qid):
+    """处理单个辨析题的DELETE和PUT请求"""
+    if request.method == "DELETE":
+        dq = DistinguishQuestion.query.get(qid)
+        if not dq:
+            return jsonify({"status": "error", "message": "not found"}), 404
+        db.session.delete(dq)
+        db.session.commit()
+        return jsonify({"status": "ok", "message": "delete ok"})
+    elif request.method == "PUT":
+        import traceback
+        print(f"[DEBUG] PUT request: qid={qid}")
+        print(f"[DEBUG] request.json: {request.json}")
+        
+        try:
+            dq = DistinguishQuestion.query.get(qid)
+            print(f"[DEBUG] DistinguishQuestion found: {dq is not None}")
+            
+            if not dq:
+                return jsonify({"status": "error", "message": "not found"}), 404
+            
+            data = request.json
+            if "stem" in data:
+                dq.stem = data["stem"]
+            if "explanation" in data:
+                dq.explanation = data["explanation"]
+            
+            if "options" in data:
+                DistinguishOption.query.filter_by(distinguish_question_id=qid).delete()
+                print(f"[DEBUG] Deleted old options")
+                
+                for opt in data["options"]:
+                    new_opt = DistinguishOption(
+                        distinguish_question_id=qid,
+                        option_key=opt.get("option_key", ""),
+                        option_text=opt.get("option_text", ""),
+                        is_correct=opt.get("is_correct", True),
+                        corrected_text=opt.get("corrected_text", None)
+                    )
+                    db.session.add(new_opt)
+                print(f"[DEBUG] Added {len(data['options'])} new options")
+            
+            db.session.commit()
+            print(f"[DEBUG] Commit successful")
+            
+            return jsonify({"status": "ok", "data": dq.to_dict()})
+        except Exception as e:
+            print(f"[DEBUG] Exception: {str(e)}")
+            traceback.print_exc()
+            return jsonify({"status": "error", "message": str(e)}), 500
+
+@distinguish_bp.route("/questions/batch", methods=["DELETE"])
+def batch_delete_distinguish():
+    """批量删除辨析题"""
+    ids = request.json.get("ids", [])
+    if not ids:
+        return jsonify({"status": "error", "message": "ids required"}), 400
+    DistinguishQuestion.query.filter(DistinguishQuestion.id.in_(ids)).delete(synchronize_session=False)
+    db.session.commit()
+    return jsonify({"status": "ok", "message": f"deleted {len(ids)}"})
+
+@distinguish_bp.route("/plan/add", methods=["POST"])
+def add_to_plan():
+    """添加选项到辨析规划"""
+    user_id = request.args.get("user_id", "default_user")
+    option_ids = request.json.get("option_ids", [])
+    if not option_ids:
+        return jsonify({"status": "error", "message": "option_ids required"}), 400
+    today = datetime.now().date()
+    count = 0
+    for opt_id in option_ids:
+        if DistinguishRecord.query.filter_by(user_id=user_id, option_id=opt_id).first():
+            continue
+        opt = DistinguishOption.query.get(opt_id)
+        if not opt:
+            continue
+        db.session.add(DistinguishRecord(user_id=user_id, option_id=opt_id, status="learning", next_review_date=today))
+        count += 1
+    db.session.commit()
+    return jsonify({"status": "ok", "message": f"add {count} to plan"})
+
+@distinguish_bp.route("/plan/statistics", methods=["GET"])
+def plan_statistics():
+    """获取辨析规划统计"""
+    user_id = request.args.get("user_id", "default_user")
+    today = datetime.now().date()
+    total = DistinguishRecord.query.filter_by(user_id=user_id).count()
+    learning = DistinguishRecord.query.filter_by(user_id=user_id, status="learning").count()
+    reviewing = DistinguishRecord.query.filter_by(user_id=user_id, status="reviewing").count()
+    overdue = DistinguishRecord.query.filter(DistinguishRecord.user_id == user_id, DistinguishRecord.status == "reviewing", DistinguishRecord.next_review_date <= today).count()
+    return jsonify({"status": "ok", "data": {"total_records": total, "learning_count": learning, "reviewing_count": reviewing, "today_review_count": learning + overdue}})
+
+@distinguish_bp.route("/plan/tasks", methods=["GET"])
+def plan_tasks():
+    """获取今日辨析任务（包含重复题目）"""
+    user_id = request.args.get("user_id", "default_user")
+    today = datetime.now().date()
+    
+    learning = DistinguishRecord.query.filter_by(user_id=user_id, status="learning").all()
+    reviewing = DistinguishRecord.query.filter(DistinguishRecord.user_id == user_id, DistinguishRecord.status == "reviewing", DistinguishRecord.next_review_date <= today).all()
+    
+    result = generate_unique_queue(learning, reviewing)
+    
+    return jsonify({"status": "ok", "data": [t.to_dict() for t in result], "total": len(result)})
+
+
+def generate_practice_queue(learning, reviewing, record_id=None, feedback=None):
+    """生成练习队列（包含重复题目）"""
+    queue = list(learning) + list(reviewing)
+    
+    if not queue:
+        return []
+    
+    unique_ids = set()
+    result = []
+    
+    for item in queue:
+        if item.id not in unique_ids:
+            result.append(item)
+            unique_ids.add(item.id)
+    
+    if record_id and feedback:
+        record = None
+        for item in learning + reviewing:
+            if item.id == record_id:
+                record = item
+                break
+        
+        if record and record.status == "learning":
+            if feedback == "forgot":
+                result.append(record)
+            elif feedback == "remembered" and record.today_consecutive_count < 2:
+                result.append(record)
+    
+    return result
+
+
+def generate_unique_queue(learning, reviewing):
+    """生成唯一题目队列（用于初始加载）"""
+    queue = list(learning) + list(reviewing)
+    
+    if not queue:
+        return []
+    
+    unique_ids = set()
+    result = []
+    
+    for item in queue:
+        if item.id not in unique_ids:
+            result.append(item)
+            unique_ids.add(item.id)
+    
+    return result
+
+@distinguish_bp.route("/plan/feedback", methods=["POST"])
+def plan_feedback():
+    """辨析记忆反馈（艾宾浩斯遗忘曲线算法）"""
+    user_id = request.args.get("user_id", "default_user")
+    data = request.json
+    record_id = data.get("record_id")
+    fb = data.get("feedback")
+    if not record_id or not fb:
+        return jsonify({"status": "error", "message": "record_id and feedback required"}), 400
+    record = DistinguishRecord.query.filter_by(id=record_id, user_id=user_id).first()
+    if not record:
+        return jsonify({"status": "error", "message": "not found"}), 404
+    today = datetime.now().date()
+    intervals = [1, 2, 4, 7, 15, 30, 60, 120, 180, 365]
+    
+    # 记录原始状态和连续正确次数（在状态改变之前）
+    original_status = record.status
+    original_consecutive_count = record.today_consecutive_count
+    
+    if record.status == "learning":
+        if fb == "remembered":
+            record.today_consecutive_count += 1
+            
+            if record.today_consecutive_count >= 2:
+                record.status = "reviewing"
+                record.consecutive_correct = 1
+                record.interval_days = 1
+                record.next_review_date = today + timedelta(days=1)
+                record.today_consecutive_count = 0
+        else:
+            record.today_consecutive_count = 0
+    else:
+        if fb == "remembered":
+            if record.last_review_date != today:
+                record.consecutive_correct += 1
+            if record.consecutive_correct <= len(intervals):
+                record.interval_days = intervals[record.consecutive_correct - 1]
+            else:
+                record.interval_days = min(int(record.interval_days * 1.5), 365)
+            record.next_review_date = today + timedelta(days=record.interval_days)
+        else:
+            record.status = "learning"
+            record.consecutive_correct = 0
+            record.interval_days = 1
+            record.next_review_date = today
+            record.today_consecutive_count = 0
+    
+    record.last_review_date = today
+    record.review_count += 1
+    db.session.commit()
+    
+    # 计算是否需要重复该题目以及间隔
+    repeat_info = None
+    if original_status == "learning":
+        if fb == "forgot":
+            repeat_info = {"interval": 8, "reason": "答错，8题后再次出现"}
+        else:
+            if original_consecutive_count == 0:
+                repeat_info = {"interval": 12, "reason": "答对，12题后验证"}
+    else:
+        if fb == "forgot":
+            repeat_info = {"interval": 8, "reason": "复习答错，打回初学，8题后再次出现"}
+
+    return jsonify({
+        "status": "ok", 
+        "data": record.to_dict(),
+        "repeat_info": repeat_info,
+        "feedback_result": "remembered" if fb == "remembered" else "forgot"
+    })
+
+@distinguish_bp.route("/plan/practice", methods=["GET"])
+def plan_practice():
+    """获取辨析练习题目（包含重复题目）"""
+    user_id = request.args.get("user_id", "default_user")
+    today = datetime.now().date()
+    
+    learning = DistinguishRecord.query.filter_by(user_id=user_id, status="learning").all()
+    reviewing = DistinguishRecord.query.filter(DistinguishRecord.user_id == user_id, DistinguishRecord.status == "reviewing", DistinguishRecord.next_review_date <= today).all()
+    
+    result = generate_practice_queue(learning, reviewing)
+    
+    return jsonify({"status": "ok", "data": [t.to_dict() for t in result], "total": len(result)})
+
+@distinguish_bp.route("/plan/list", methods=["GET"])
+def plan_list():
+    """获取规划记录列表"""
+    user_id = request.args.get("user_id", "default_user")
+    records = DistinguishRecord.query.filter_by(user_id=user_id).order_by(DistinguishRecord.next_review_date).all()
+    result = []
+    for r in records:
+        opt = DistinguishOption.query.get(r.option_id)
+        if opt:
+            dq = DistinguishQuestion.query.get(opt.distinguish_question_id)
+            q = dq.question if dq else None
+            result.append({
+                "id": r.id,
+                "option_id": r.option_id,
+                "question_id": dq.id if dq else None,
+                "chapter_name": q.chapter.name if q and q.chapter else "",
+                "question_stem": q.stem if q else "",
+                "option_key": opt.option_key,
+                "option_text": opt.option_text,
+                "is_correct": opt.is_correct,
+                "status": r.status,
+                "consecutive_correct": r.consecutive_correct,
+                "interval_days": r.interval_days,
+                "next_review_date": r.next_review_date.isoformat() if r.next_review_date else "",
+                "today_consecutive_count": r.today_consecutive_count,
+                "review_count": r.review_count
+            })
+    return jsonify({"status": "ok", "data": result, "total": len(result)})
+
+@distinguish_bp.route("/plan/record/<int:rid>", methods=["DELETE"])
+def delete_plan_record(rid):
+    """从规划中移除"""
+    record = DistinguishRecord.query.get(rid)
+    if not record:
+        return jsonify({"status": "error", "message": "not found"}), 404
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({"status": "ok", "message": "removed"})
+
+@distinguish_bp.route("/plan/clear-all", methods=["DELETE"])
+def clear_all_plan():
+    """清除全部规划"""
+    user_id = request.args.get("user_id", "default_user")
+    DistinguishRecord.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
+    return jsonify({"status": "ok", "message": "cleared"})
+
+def register_distinguish_api(app):
+    """注册辨析判断模块到Flask应用"""
+    app.register_blueprint(distinguish_bp)
+
+
+# =========== 刷题规划模块 API ===========
+
+# 获取可加入规划的题目列表
+@app.route('/api/practice-plan/questions', methods=['GET'])
+def get_practice_plan_questions():
+    """获取题库中的题目，用于选择加入规划"""
+    user_id = request.args.get('user_id', 'default_user')
+    chapter_ids = request.args.getlist('chapter_id', type=int)
+    keyword = request.args.get('keyword', '')
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    
+    query = Question.query.filter_by(status='published')
+    
+    if chapter_ids:
+        query = query.filter(Question.chapter_id.in_(chapter_ids))
+    
+    if keyword:
+        query = query.filter(Question.stem.like(f'%{keyword}%'))
+    
+    # 获取已加入规划的题目ID
+    existing_question_ids = [r.question_id for r in PracticePlanRecord.query.filter_by(user_id=user_id).all()]
+    
+    total = query.count()
+    questions = query.order_by(Question.id.asc()).offset((page - 1) * page_size).limit(page_size).all()
+    
+    result = []
+    for q in questions:
+        q_dict = q.to_dict()
+        q_dict['already_in_plan'] = q.id in existing_question_ids
+        result.append(q_dict)
+    
+    return jsonify({
+        'status': 'ok',
+        'data': result,
+        'total': total,
+        'page': page,
+        'page_size': page_size
+    })
+
+# 添加题目到规划
+@app.route('/api/practice-plan/add', methods=['POST'])
+def add_to_practice_plan():
+    """添加题目到刷题规划"""
+    user_id = request.args.get('user_id', 'default_user')
+    data = request.json
+    question_ids = data.get('question_ids', [])
+    
+    if not question_ids:
+        return jsonify({'status': 'error', 'message': 'question_ids required'}), 400
+    
+    today = datetime.now().date()
+    added_count = 0
+    skipped_count = 0
+    
+    for qid in question_ids:
+        # 检查是否已存在
+        existing = PracticePlanRecord.query.filter_by(user_id=user_id, question_id=qid).first()
+        if existing:
+            skipped_count += 1
+            continue
+        
+        # 检查题目是否存在
+        question = Question.query.get(qid)
+        if not question:
+            skipped_count += 1
+            continue
+        
+        record = PracticePlanRecord(
+            user_id=user_id,
+            question_id=qid,
+            status='learning',
+            consecutive_correct=0,
+            interval_days=1,
+            next_review_date=today,
+            last_review_date=None,
+            review_count=0,
+            learning_repetition=0,
+            today_consecutive_count=0,
+            correct_at_learning_count=0
+        )
+        db.session.add(record)
+        added_count += 1
+    
+    db.session.commit()
+    
+    return jsonify({
+        'status': 'ok',
+        'message': f'添加成功 {added_count} 题，{skipped_count} 题已存在'
+    })
+
+# 获取规划记录列表
+@app.route('/api/practice-plan/list', methods=['GET'])
+def get_practice_plan_list():
+    """获取刷题规划记录列表
+    
+    今日待复习任务：
+    - 初学中状态：每天都需要复习
+    - 复习中状态：next_review_date <= 今日
+    """
+    user_id = request.args.get('user_id', 'default_user')
+    today = datetime.now().date()
+    status_filter = request.args.get('status')
+    
+    # 获取初学中的题目（每天都需要复习，未完成的）
+    query_learning = PracticePlanRecord.query.filter_by(user_id=user_id, status='learning', completed=False)
+    
+    # 获取复习中的题目（只在需要复习的日期出现，未完成的）
+    query_reviewing = PracticePlanRecord.query.filter(
+        PracticePlanRecord.user_id == user_id,
+        PracticePlanRecord.status == 'reviewing',
+        PracticePlanRecord.next_review_date <= today,
+        PracticePlanRecord.completed == False
+    )
+    
+    if status_filter == 'learning':
+        records = query_learning.order_by(PracticePlanRecord.next_review_date).all()
+    elif status_filter == 'reviewing':
+        records = query_reviewing.order_by(PracticePlanRecord.next_review_date).all()
+    else:
+        # 合并两种状态的记录
+        learning_records = query_learning.all()
+        reviewing_records = query_reviewing.all()
+        records = learning_records + reviewing_records
+        records.sort(key=lambda x: x.next_review_date)
+    
+    return jsonify({
+        'status': 'ok',
+        'data': [r.to_dict() for r in records],
+        'total': len(records)
+    })
+
+# 获取规划统计
+@app.route('/api/practice-plan/statistics', methods=['GET'])
+def get_practice_plan_statistics():
+    """获取刷题规划统计"""
+    user_id = request.args.get('user_id', 'default_user')
+    today = datetime.now().date()
+    
+    # 总记录数：所有添加过的题目（不区分completed状态）
+    total = PracticePlanRecord.query.filter_by(user_id=user_id).count()
+    # 学习中的题目
+    learning = PracticePlanRecord.query.filter_by(user_id=user_id, status='learning').count()
+    # 复习中的题目
+    reviewing = PracticePlanRecord.query.filter_by(user_id=user_id, status='reviewing').count()
+    # 今日待复习：初学中 + 复习中且下次复习日期 <= 今日
+    today_review = PracticePlanRecord.query.filter_by(user_id=user_id, status='learning').count()
+    today_review += PracticePlanRecord.query.filter(
+        PracticePlanRecord.user_id == user_id,
+        PracticePlanRecord.status == 'reviewing',
+        PracticePlanRecord.next_review_date <= today
+    ).count()
+    
+    return jsonify({
+        'status': 'ok',
+        'data': {
+            'total_records': total,
+            'learning_count': learning,
+            'reviewing_count': reviewing,
+            'today_review_count': today_review
+        }
+    })
+
+# 获取今日刷题任务（包含重复题目）
+@app.route('/api/practice-plan/tasks', methods=['GET'])
+def get_practice_plan_tasks():
+    """获取今日刷题任务
+    
+    今日刷题任务：
+    - 初学中状态：每天都需要复习
+    - 复习中状态：next_review_date <= 今日
+    """
+    user_id = request.args.get('user_id', 'default_user')
+    today = datetime.now().date()
+    
+    # 获取初学中状态的所有题目（未完成的）
+    learning = PracticePlanRecord.query.filter_by(user_id=user_id, status='learning', completed=False).all()
+    # 获取复习中且需要今日复习的题目
+    reviewing = PracticePlanRecord.query.filter(
+        PracticePlanRecord.user_id == user_id,
+        PracticePlanRecord.status == 'reviewing',
+        PracticePlanRecord.next_review_date <= today
+    ).all()
+    
+    result = generate_practice_plan_queue(learning, reviewing)
+    
+    return jsonify({
+        'status': 'ok',
+        'data': [t.to_dict() for t in result],
+        'total': len(result)
+    })
+
+
+def generate_practice_plan_queue(learning, reviewing):
+    """生成刷题队列
+    
+    实现记忆算法中的间隔重复逻辑：
+    - 初学中首次做对：安排在12题后再次出现
+    - 初学中做错：安排在8题后再次出现
+    - 复习中做错打回初学：安排在8题后再次出现
+    """
+    # 合并初学和复习中的题目
+    queue = []
+    seen_ids = set()
+    
+    for item in learning + reviewing:
+        if item.id not in seen_ids:
+            queue.append(item)
+            seen_ids.add(item.id)
+    
+    # 根据 learning_repetition 字段调整题目位置
+    items_to_reposition = []
+    final_queue = []
+    
+    for item in queue:
+        if item.learning_repetition and item.learning_repetition > 0:
+            items_to_reposition.append(item)
+        else:
+            final_queue.append(item)
+    
+    # 将需要间隔出现的题目插入到指定位置
+    for item in items_to_reposition:
+        insert_pos = min(item.learning_repetition, len(final_queue))
+        final_queue.insert(insert_pos, item)
+    
+    return final_queue
+
+
+# 刷题反馈
+@app.route('/api/practice-plan/feedback', methods=['POST'])
+def practice_plan_feedback():
+    """刷题记忆反馈
+    
+    初学中状态逻辑：
+    - 首次做错：wrong_count++, 8题后再次出现
+    - 首次做对：correct_at_learning_count=1, 12题后再次出现验证
+    - 做对验证（第二次）：完成，移出任务列表
+    - 做错验证：wrong_count++, 重置为8题后出现
+    
+    复习中状态逻辑：
+    - 做对：完成，移出任务列表
+    - 做错：打回初学中，重新开始
+    """
+    user_id = request.args.get('user_id', 'default_user')
+    data = request.json
+    record_id = data.get('record_id')
+    feedback = data.get('feedback')  # 'correct' 或 'wrong'
+    
+    if not record_id or not feedback:
+        return jsonify({'status': 'error', 'message': 'record_id and feedback required'}), 400
+    
+    record = PracticePlanRecord.query.filter_by(id=record_id, user_id=user_id).first()
+    if not record:
+        return jsonify({'status': 'error', 'message': 'not found'}), 404
+    
+    today = datetime.now().date()
+    intervals = [1, 2, 4, 7, 15, 30, 60, 120, 180, 365]
+    
+    if record.status == 'learning':
+        # ==========================================
+        # 【初学中状态】短间隔循环
+        # ==========================================
+        if feedback == 'correct':
+            record.correct_at_learning_count += 1
+            
+            if record.correct_at_learning_count >= 2:
+                # ✓ 连续两次答对，完成初学，进入复习中状态
+                record.status = 'reviewing'
+                record.consecutive_correct = 1
+                record.interval_days = 1
+                record.next_review_date = today + timedelta(days=1)
+                record.completed = True
+                record.completed_at = datetime.now()
+                record.learning_repetition = 0  # 重置，避免干扰后续队列排序
+            else:
+                # 第一次答对，安排在12个题目之后验证
+                record.learning_repetition = 12
+                record.next_review_date = today
+        else:
+            # 做错：重置验证计数，安排在8个题目之后出现
+            record.correct_at_learning_count = 0
+            record.learning_repetition = 8
+            record.next_review_date = today
+            
+    else:
+        # ==========================================
+        # 【复习中状态】间隔复习
+        # ==========================================
+        if feedback == 'correct':
+            # ✓ 复习题目做对一次，完成当日任务，增加间隔
+            record.consecutive_correct += 1
+            # 根据连续答对次数确定新间隔
+            if record.consecutive_correct - 1 < len(intervals):
+                record.interval_days = intervals[record.consecutive_correct - 1]
+            else:
+                # 超过最大档位，按1.5倍增加
+                record.interval_days = int(record.interval_days * 1.5)
+            # 设置下次复习日
+            record.next_review_date = today + timedelta(days=record.interval_days)
+            record.completed = True
+            record.completed_at = datetime.now()
+        else:
+            # 做错：打回初学状态，重新开始短间隔循环
+            record.status = 'learning'
+            record.consecutive_correct = 0
+            record.interval_days = 1
+            record.next_review_date = today
+            record.learning_repetition = 8  # 安排在8个题目之后出现
+            record.today_consecutive_count = 0
+            record.correct_at_learning_count = 0
+    
+    record.last_review_date = today
+    record.review_count += 1
+    
+    db.session.commit()
+    
+    # 获取更新后的队列信息（只包含未完成的题目）
+    learning = PracticePlanRecord.query.filter_by(user_id=user_id, status='learning', completed=False).all()
+    reviewing = PracticePlanRecord.query.filter(
+        PracticePlanRecord.user_id == user_id,
+        PracticePlanRecord.status == 'reviewing',
+        PracticePlanRecord.next_review_date <= today,
+        PracticePlanRecord.completed == False
+    ).all()
+    
+    remaining = len(learning) + len(reviewing)
+    queue = generate_practice_plan_queue(learning, reviewing)
+    
+    return jsonify({
+        'status': 'ok',
+        'data': record.to_dict(),
+        'remaining': remaining,
+        'queue_length': len(queue)
+    })
+
+# 推进学习循环进度（每练习一个题目减1）
+@app.route('/api/practice-plan/advance', methods=['POST'])
+def advance_practice_repetition():
+    """减少learning_repetition计数"""
+    user_id = request.args.get('user_id', 'default_user')
+    data = request.json
+    record_id = data.get('record_id')
+    
+    record = PracticePlanRecord.query.filter_by(id=record_id, user_id=user_id).first()
+    if not record:
+        return jsonify({'status': 'error', 'message': 'not found'}), 404
+    
+    if record.learning_repetition > 0:
+        record.learning_repetition -= 1
+        db.session.commit()
+    
+    return jsonify({'status': 'ok', 'data': record.to_dict()})
+
+# 从规划中移除
+@app.route('/api/practice-plan/record/<int:rid>', methods=['DELETE'])
+def delete_practice_plan_record(rid):
+    """从刷题规划中移除"""
+    record = PracticePlanRecord.query.get(rid)
+    if not record:
+        return jsonify({'status': 'error', 'message': 'not found'}), 404
+    
+    db.session.delete(record)
+    db.session.commit()
+    return jsonify({'status': 'ok', 'message': 'removed'})
+
+# 清除全部规划
+@app.route('/api/practice-plan/clear-all', methods=['DELETE'])
+def clear_all_practice_plan():
+    """清除全部刷题规划"""
+    user_id = request.args.get('user_id', 'default_user')
+    PracticePlanRecord.query.filter_by(user_id=user_id).delete()
+    db.session.commit()
+    return jsonify({'status': 'ok', 'message': 'cleared'})
+
+
+# 注册辨析判断 Blueprint（只注册一次）
+register_distinguish_api(app)
 
 if __name__ == '__main__':
     print("=== 启动 Flask 服务器 ===")
@@ -2074,4 +2812,4 @@ if __name__ == '__main__':
             db.session.add(default_pref)
         db.session.commit()
 
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, use_reloader=False, host='0.0.0.0', port=5001)
