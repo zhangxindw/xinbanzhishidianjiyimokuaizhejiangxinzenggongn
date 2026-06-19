@@ -37,12 +37,12 @@
       </div>
     </div>
 
-    <div v-if="!practiceStarted" class="start-screen">
+    <div v-if="!practiceStarted && practiceMode !== 'memory'" class="start-screen">
       <div class="start-card">
         <h2>{{ practiceModeTitle }}</h2>
         <p>{{ practiceModeDescription }}</p>
 
-        <div v-if="practiceMode === 'memorize' || practiceMode === 'sequential'" class="config-section">
+        <div v-if="(practiceMode === 'memorize' || practiceMode === 'sequential') && practiceMode !== 'memory'" class="config-section">
           <div class="config-header">
             <h3 v-if="practiceMode === 'memorize'">📚 背题配置</h3>
             <h3 v-else>📖 顺序刷题配置</h3>
@@ -75,6 +75,13 @@
                   <div class="switch-wrapper">
                     <el-switch v-model="config.shuffleOptions" />
                     <span class="switch-label">{{ config.shuffleOptions ? '已启用' : '已禁用' }}</span>
+                  </div>
+                </div>
+                <div v-if="practiceMode === 'memorize' || practiceMode === 'sequential'" class="config-item">
+                  <label>辨析题模式:</label>
+                  <div class="switch-wrapper">
+                    <el-switch v-model="config.distinguishMode" />
+                    <span class="switch-label">{{ config.distinguishMode ? '已开启' : '已关闭' }}</span>
                   </div>
                 </div>
               </div>
@@ -250,6 +257,85 @@
           </div>
         </div>
 
+        <div v-if="practiceMode === 'crazy'" class="config-section">
+          <div class="config-header">
+            <h3>⚡ 疯狂刷题配置</h3>
+            <span class="config-tip">高强度练习，错误题目会重复出现</span>
+          </div>
+          
+          <div class="config-grid">
+            <div class="config-card">
+              <div class="config-card-header">
+                <el-icon><Folder /></el-icon>
+                <span>章节选择</span>
+              </div>
+              <div class="config-card-body">
+                <div class="config-item">
+                  <label>选择章节:</label>
+                  <div class="chapter-select-controls">
+                    <el-select v-model="config.chapterIds" multiple placeholder="选择章节" class="chapter-select">
+                      <el-option v-for="ch in chapters" :key="ch.id" :label="ch.name" :value="ch.id" />
+                    </el-select>
+                    <div class="chapter-select-actions">
+                      <el-button class="chapter-select-btn" @click="selectAllChapters" size="small">全选</el-button>
+                      <el-button class="chapter-clear-btn" @click="clearAllChapters" size="small">清空</el-button>
+                    </div>
+                  </div>
+                  <span class="config-hint">不选择则从全部题库练习</span>
+                </div>
+                
+                <div class="config-item">
+                  <label>打乱题目顺序:</label>
+                  <div class="switch-wrapper">
+                    <el-switch v-model="config.shuffleQuestions" />
+                    <span class="switch-label">{{ config.shuffleQuestions ? '已启用' : '已禁用' }}</span>
+                  </div>
+                </div>
+                
+                <div class="config-item">
+                  <label>打乱选项顺序:</label>
+                  <div class="switch-wrapper">
+                    <el-switch v-model="config.shuffleOptions" />
+                    <span class="switch-label">{{ config.shuffleOptions ? '已启用' : '已禁用' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div class="config-card">
+              <div class="config-card-header">
+                <el-icon><Document /></el-icon>
+                <span>题目预览</span>
+              </div>
+              <div class="config-card-body">
+                <div class="preview-stat">
+                  <span class="preview-label">总题数:</span>
+                  <span class="preview-value">{{ selectedChapterQuestionCount }}</span>
+                </div>
+                <div class="preview-stat" v-if="config.chapterIds.length > 0">
+                  <span class="preview-label">已选章节:</span>
+                  <span class="preview-value">{{ config.chapterIds.length }}</span>
+                </div>
+                <div class="chapter-previews" v-if="config.chapterIds.length > 0">
+                  <div v-for="chapterId in config.chapterIds" :key="chapterId" class="chapter-preview">
+                    <span class="chapter-name">{{ getChapterName(chapterId) }}</span>
+                    <span class="chapter-count">{{ getChapterQuestionCount(chapterId) }} 题</span>
+                  </div>
+                </div>
+                <div class="crazy-rules">
+                  <h4>疯狂刷题规则：</h4>
+                  <ul>
+                    <li>✓ 正确题目直接完成，不再出现</li>
+                    <li>✗ 错误题目在8题后重复出现</li>
+                    <li>✗ 错误题目需答对2次才算完成</li>
+                    <li>⚡ 若剩余题目不足8题，移至最后</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <el-button type="primary" size="large" @click="startPractice" :disabled="practiceMode === 'sequential' && config.chapterIds.length === 0">
           开始练习
         </el-button>
@@ -272,9 +358,11 @@
               </el-button>
             </div>
             <div class="question-navigation">
-              <el-button size="small" @click="prevQuestion" :disabled="currentIndex === 0">上一题</el-button>
-              <span class="progress">{{ currentIndex + 1 }} / {{ questions.length }}</span>
-              <el-button size="small" @click="nextQuestion" :disabled="currentIndex === questions.length - 1">下一题</el-button>
+              <el-button v-if="practiceMode !== 'crazy' && practiceMode !== 'memory'" size="small" @click="prevQuestion" :disabled="currentIndex === 0">上一题</el-button>
+              <span class="progress">
+                {{ practiceMode === 'crazy' ? `剩余 ${crazyTotalCount - crazyCompletedCount} 题` : (practiceMode === 'memory' ? `剩余 ${memoryRemainCount} 题` : `${currentIndex + 1} / ${questions.length}`) }}
+              </span>
+              <el-button size="small" @click="nextQuestion" :disabled="practiceMode === 'crazy' ? crazyCompletedCount >= crazyTotalCount : (practiceMode === 'memory' ? memoryCompletedCount >= memoryTotalCount : currentIndex === questions.length - 1)">下一题</el-button>
             </div>
           </div>
 
@@ -294,9 +382,13 @@
             <div class="editor-content" ref="questionEditorRef" contenteditable></div>
           </div>
 
+          <div v-else-if="isQuestionLoading" class="question-loading">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>加载中...</span>
+          </div>
           <div v-else class="question-content" :style="contentStyle" v-html="currentQuestion?.stem_html || currentQuestion?.stem"></div>
 
-          <div class="options-list" v-if="currentQuestion?.option_a">
+          <div class="options-list" v-if="currentQuestion?.option_a && !isQuestionLoading">
             <div v-for="opt in displayOptions" :key="opt.label"
                  class="option-item"
                  :class="{
@@ -310,7 +402,7 @@
             </div>
           </div>
 
-          <div class="question-tabs">
+          <div v-if="practiceMode !== 'crazy' && practiceMode !== 'memory'" class="question-tabs">
             <div v-for="(q, idx) in questions" :key="q.id || idx"
                  class="question-tab"
                  :class="{
@@ -367,13 +459,25 @@
           </div>
 
           <div v-if="showAnswer && practiceMode !== 'memorize'" class="action-buttons">
+            <el-button v-if="config.distinguishMode && currentQuestion?.id" 
+              :type="isInDistinguish(currentQuestion.id) ? 'success' : 'primary'" 
+              :disabled="isInDistinguish(currentQuestion.id)" 
+              @click="openDistinguishDialog">
+              {{ isInDistinguish(currentQuestion.id) ? '已加入辨析题' : '加入辨析题' }}
+            </el-button>
             <el-button v-if="!isInWrongBook(currentQuestion?.id)" type="warning" @click="addToWrongBook">加入错题本</el-button>
             <el-button v-else type="success" @click="removeFromWrongBook">移出错题本</el-button>
-            <el-button type="primary" @click="nextQuestion" v-if="currentIndex < questions.length - 1">下一题</el-button>
+            <el-button type="primary" @click="nextQuestion" v-if="practiceMode === 'crazy' ? crazyCompletedCount < crazyTotalCount : (practiceMode === 'memory' ? memoryCompletedCount < memoryTotalCount : currentIndex < questions.length - 1)">下一题</el-button>
             <el-button @click="finishPractice">完成练习</el-button>
           </div>
 
           <div v-if="practiceMode === 'memorize'" class="action-buttons">
+            <el-button v-if="config.distinguishMode && currentQuestion?.id" 
+              :type="isInDistinguish(currentQuestion.id) ? 'success' : 'primary'" 
+              :disabled="isInDistinguish(currentQuestion.id)" 
+              @click="openDistinguishDialog">
+              {{ isInDistinguish(currentQuestion.id) ? '已加入辨析题' : '加入辨析题' }}
+            </el-button>
             <el-button @click="toggleMastered" :type="isMastered ? 'success' : 'default'">
               {{ isMastered ? '已掌握' : '标记为已掌握' }}
             </el-button>
@@ -389,6 +493,68 @@
         <img :src="previewImageUrl" alt="预览图片" class="image-preview-img" />
       </div>
     </div>
+  <!-- 辨析题弹窗 -->
+  <el-dialog v-model="showDistinguishDialog" title="加入辨析题" width="75%" :close-on-click-modal="false" class="distinguish-dialog-container">
+    <div v-if="distinguishQuestionData" class="distinguish-dialog">
+      <div class="dialog-header">
+        <div class="dialog-icon">
+          <el-icon size="28"><Warning /></el-icon>
+        </div>
+        <div class="dialog-title-section">
+          <h3>辨析题设置</h3>
+          <p class="dialog-subtitle">请判断每个选项的正误，错误选项可添加正确表述</p>
+        </div>
+      </div>
+      
+      <div class="dialog-content">
+        <div class="stem-card">
+          <div class="stem-label">
+            <el-icon><Document /></el-icon>
+            <span>题干</span>
+          </div>
+          <div class="stem-content" v-html="distinguishQuestionData.stem_html || distinguishQuestionData.stem"></div>
+        </div>
+
+        <div class="options-section">
+          <div class="options-label">
+            <el-icon><List /></el-icon>
+            <span>选项设置</span>
+          </div>
+          <div v-for="(opt, idx) in distinguishOptions" :key="idx" class="option-card" :class="{ wrong: !opt.is_correct }">
+            <div class="option-header">
+              <span class="option-key">{{ opt.key }}.</span>
+              <span class="option-text">{{ opt.text }}</span>
+              <button class="toggle-btn" :class="{ correct: opt.is_correct, wrong: !opt.is_correct }" @click="toggleOptionCorrect(idx)">
+                <el-icon size="18"><Check v-if="opt.is_correct" /><Close v-else /></el-icon>
+                <span>{{ opt.is_correct ? '正确' : '错误' }}</span>
+              </button>
+            </div>
+            <div v-if="!opt.is_correct" class="corrected-input-section">
+              <div class="corrected-label">
+                <el-icon><EditPen /></el-icon>
+                <span>正确表述</span>
+              </div>
+              <el-input v-model="opt.corrected_text" placeholder="请输入该选项的正确表述..." size="large" />
+            </div>
+          </div>
+        </div>
+
+        <div v-if="distinguishQuestionData.explanation || distinguishQuestionData.explanation_html" class="explanation-card">
+          <div class="explanation-label">
+            <el-icon><InfoFilled /></el-icon>
+            <span>原题解析</span>
+          </div>
+          <div class="explanation-content" v-html="distinguishQuestionData.explanation_html || distinguishQuestionData.explanation"></div>
+        </div>
+      </div>
+    </div>
+    <template #footer>
+      <div class="dialog-footer">
+        <el-button @click="showDistinguishDialog = false" class="cancel-btn">取消</el-button>
+        <el-button type="primary" @click="saveDistinguishQuestion" class="save-btn">保存辨析题</el-button>
+      </div>
+    </template>
+  </el-dialog>
   </div>
 </template>
 
@@ -397,6 +563,7 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount, watch, nextTick } 
 import { useRoute, useRouter } from 'vue-router'
 import { useQuizStore } from '@/store/quiz'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Loading } from '@element-plus/icons-vue'
 import axios from 'axios'
 
 const route = useRoute()
@@ -405,11 +572,13 @@ const store = useQuizStore()
 
 const practiceMode = computed(() => {
   const path = route.path
+  if (path.includes('memory')) return 'memory'
   if (path.includes('memorize')) return 'memorize'
   if (path.includes('sequential')) return 'sequential'
   if (path.includes('random')) return 'random'
   if (path.includes('cross-chapter')) return 'cross-chapter'
   if (path.includes('wrong')) return 'wrong'
+  if (path.includes('crazy')) return 'crazy'
   return 'memorize'
 })
 
@@ -418,7 +587,9 @@ const practiceModeTitle = computed(() => {
     memorize: '背题模式',
     sequential: '顺序刷题',
     random: '随机出题',
-    wrong: '错题练习'
+    wrong: '错题练习',
+    crazy: '疯狂刷题',
+    memory: '记忆刷题'
   }
   return titles[practiceMode.value] || '练习'
 })
@@ -428,9 +599,35 @@ const practiceModeDescription = computed(() => {
     memorize: '自动展示答案和解析，适合记忆背诵，可选择特定章节',
     sequential: '按章节顺序依次练习题目',
     random: '从题库中随机抽取题目进行练习',
-    wrong: '针对错题本中的题目进行专项练习'
+    wrong: '针对错题本中的题目进行专项练习',
+    memory: '根据刷题规划安排，执行记忆训练任务'
   }
   return descriptions[practiceMode.value] || ''
+})
+
+// 监听路由变化，重置刷题状态
+watch(() => route.path, (newPath) => {
+  // 重置所有状态
+  practiceStarted.value = false
+  questions.value = []
+  currentIndex.value = 0
+  selectedAnswer.value = null
+  showAnswer.value = false
+  answeredQuestions.value = {}
+  config.count = 10
+  config.chapterIds = []
+  config.shuffleOptions = false
+  config.distinguishMode = false
+  
+  // 重置疯狂刷题和记忆刷题状态
+  crazyQuestionStatus.value = {}
+  crazyCompletedCount.value = 0
+  crazyTotalCount.value = 0
+  memoryQuestionStatus.value = {}
+  memoryQueue.value = []
+  memoryCompletedCount.value = 0
+  memoryTotalCount.value = 0
+  memoryRemainCount.value = 0
 })
 
 const chapters = ref([])
@@ -448,11 +645,17 @@ const getChapterQuestionCount = (chapterId) => {
 const questions = ref([])
 const currentIndex = ref(0)
 const practiceStarted = ref(false)
+const showDistinguishDialog = ref(false)
+const distinguishQuestionData = ref(null)
+const distinguishOptions = ref([])
+const isInDistinguishMap = ref({})
 const showAnswer = ref(false)
+const selectedAnswer = ref(null)
 const lastAnswerCorrect = ref(false)
 const lastCorrectAnswer = ref('')
 const answeredQuestions = ref({})
 const isFavorite = ref(false)
+const isQuestionLoading = ref(false) // 题目加载状态，用于隐藏切换过程
 const isInWrongBookMap = ref({})
 const wrongCount = ref(0)
 const totalQuestions = ref(0)
@@ -599,10 +802,122 @@ const config = reactive({
   count: 10,
   score: 5,
   shuffleOptions: true,
+  shuffleQuestions: false,
+  distinguishMode: false,
   chapterIds: [],
   chapterRatios: {},
   wrongRatio: 20
 })
+
+// 疯狂刷题相关状态
+const crazyQuestions = ref([])
+const crazyCompletedCount = ref(0)
+const crazyTotalCount = ref(0)
+const crazyQuestionStatus = ref({}) // { questionId: { correctCount: 0, wrongCount: 0, completed: false } }
+
+// 记忆刷题模式数据
+const memoryQuestionStatus = ref({}) // { questionId: { correctAtLearning: 0, wrongCount: 0, completed: false, status: 'learning'|'reviewing' } }
+const memoryQueue = ref([]) // 记忆刷题队列
+const memoryCompletedCount = ref(0)
+const memoryTotalCount = ref(0)
+const memoryRemainCount = ref(0) // 剩余题目数量
+const memoryLastAnswerCorrect = ref(null) // 记录上次答题结果（供下一题时处理反馈）
+
+// 数组洗牌函数
+const shuffleArray = (array) => {
+  const newArray = [...array]
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[newArray[i], newArray[j]] = [newArray[j], newArray[i]]
+  }
+  return newArray
+}
+
+// 重新打乱题目选项顺序（用于记忆刷题模式题目再次出现时）
+const reshuffleQuestionOptions = (question) => {
+  if (!question || !question.option_a || !question.option_b) {
+    return question
+  }
+  
+  // 原始答案字母（使用保存的原始答案，如果没有则使用当前答案）
+  const originalAnswerLetter = question.original_answer ? question.original_answer.toUpperCase() : (question.answer ? question.answer.toUpperCase() : '')
+  
+  console.log('[记忆刷题] reshuffleQuestionOptions:', {
+    originalAnswerLetter,
+    savedOriginalAnswer: question.original_answer,
+    currentAnswer: question.answer,
+    existingOriginalOptions: question.original_options
+  })
+  
+  // 获取原始选项内容
+  // 如果有保存的原始选项，使用它；否则从当前选项构建（第一次打乱时）
+  const optKeys = ['option_a', 'option_b', 'option_c', 'option_d', 'option_e', 'option_f']
+  let originalOptionsContent = {}
+  
+  if (question.original_options) {
+    // 使用保存的原始选项
+    originalOptionsContent = question.original_options
+    console.log('[记忆刷题] 使用保存的原始选项:', originalOptionsContent)
+  } else {
+    // 第一次打乱，当前选项就是原始选项
+    optKeys.forEach((k, i) => {
+      if (question[k]) {
+        originalOptionsContent[String.fromCharCode(65 + i)] = question[k] // A, B, C, D...
+      }
+    })
+    console.log('[记忆刷题] 从当前选项构建原始选项:', originalOptionsContent)
+  }
+  
+  // 获取原始选项值数组（按字母顺序）
+  const originalOptValues = Object.entries(originalOptionsContent)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([_, val]) => val)
+  
+  // 打乱选项值
+  const shuffled = shuffleArray([...originalOptValues])
+  
+  // 创建新的选项映射
+  const newOptions = {}
+  const letterMap = {} // 记录原始字母 -> 新字母
+  shuffled.forEach((val, i) => {
+    const letter = String.fromCharCode(97 + i) // a, b, c, d...
+    const upperLetter = letter.toUpperCase()
+    newOptions[letter] = val
+    // 找出这个值在原始选项中对应的字母
+    for (const [origLetter, origVal] of Object.entries(originalOptionsContent)) {
+      if (origVal === val) {
+        letterMap[origLetter] = upperLetter
+        break
+      }
+    }
+  })
+  
+  console.log('[记忆刷题] 打乱结果:', {
+    originalOptValues,
+    shuffled,
+    letterMap,
+    shuffledAnswer: letterMap[originalAnswerLetter] || question.answer
+  })
+  
+  // 构建打乱后的题目
+  return { 
+    ...question,
+    // 保存原始选项和原始答案，以便再次打乱时使用
+    original_options: originalOptionsContent,
+    original_answer: originalAnswerLetter,
+    option_a: newOptions.a || null,
+    option_b: newOptions.b || null,
+    option_c: newOptions.c || null,
+    option_d: newOptions.d || null,
+    option_e: newOptions.e || null,
+    option_f: newOptions.f || null,
+    shuffled_options: ['A', 'B', 'C', 'D', 'E', 'F'].slice(0, shuffled.length).map((label, i) => ({
+      label,
+      content: shuffled[i]
+    })),
+    shuffled_answer: letterMap[originalAnswerLetter] || question.answer
+  }
+}
 
 // 全选章节
 const selectAllChapters = () => {
@@ -681,6 +996,11 @@ const getChapterPreviewCount = (chapterId) => {
 
 // 保存当前刷题状态
 const saveCurrentState = () => {
+  // 记忆刷题模式不保存状态
+  if (practiceMode.value === 'memory') {
+    return
+  }
+  
   if (practiceStarted.value) {
     store.savePracticeSession(practiceMode.value, {
       questions: questions.value,
@@ -695,6 +1015,11 @@ const saveCurrentState = () => {
 
 // 恢复保存的刷题状态
 const restoreSavedState = async () => {
+  // 记忆刷题模式不恢复保存状态，每次重新加载任务
+  if (practiceMode.value === 'memory') {
+    return false
+  }
+  
   const saved = store.getSavedPracticeSession(practiceMode.value)
   if (saved && saved.practiceStarted) {
     try {
@@ -768,10 +1093,20 @@ const displayOptions = computed(() => {
 
 const getDisplayAnswer = () => {
   if (!currentQuestion.value) return ''
+  // 记忆刷题模式：始终使用打乱后的正确答案（如果有），否则使用原始答案
+  if (practiceMode.value === 'memory') {
+    // 如果有打乱后的答案，使用它
+    if (currentQuestion.value?.shuffled_answer) {
+      return currentQuestion.value.shuffled_answer
+    }
+    // 否则使用原始答案（初学题目不打乱选项）
+    return currentQuestion.value?.answer || ''
+  }
+  // 其他模式：优先使用后端返回的答案
   if (lastCorrectAnswer.value) return lastCorrectAnswer.value
   // 考虑打乱选项的情况：如果选项被打乱，显示打乱后的正确答案
-  if (currentQuestion.value?.shuffled_options) {
-    return currentQuestion.value?.shuffled_answer || ''
+  if (currentQuestion.value?.shuffled_options && currentQuestion.value?.shuffled_answer) {
+    return currentQuestion.value.shuffled_answer
   }
   return currentQuestion.value?.answer || ''
 }
@@ -805,18 +1140,89 @@ const selectOption = async (label) => {
   answeredQuestions.value[currentIndex.value] = label
   showAnswer.value = true
 
-  const questionId = currentQuestion.value.id
+  // 记忆刷题模式下使用 question_id，普通模式使用 id
+  const questionId = currentQuestion.value.question_id || currentQuestion.value.id
   const expectedAnswer = currentQuestion.value?.shuffled_options ? currentQuestion.value?.shuffled_answer : null
+  
+  console.log('[记忆刷题] selectOption:', {
+    label,
+    expectedAnswer,
+    questionId,
+    shuffled_options: currentQuestion.value?.shuffled_options,
+    shuffled_answer: currentQuestion.value?.shuffled_answer,
+    answer: currentQuestion.value?.answer
+  })
+  
   try {
     const result = await store.submitAnswer(questionId, label, expectedAnswer)
+    console.log('[记忆刷题] submitAnswer result:', result)
     lastAnswerCorrect.value = result.is_correct
     lastCorrectAnswer.value = result.correct_answer || ''
 
     if (!result.is_correct) {
       isInWrongBookMap.value[questionId] = true
     }
+
+    // 疯狂刷题模式特殊处理
+    if (practiceMode.value === 'crazy') {
+      const status = crazyQuestionStatus.value[questionId]
+      
+      if (result.is_correct) {
+        // 第一次就答对，直接完成
+        if (status.wrongCount === 0 && !status.completed) {
+          status.completed = true
+          crazyCompletedCount.value++
+        }
+        // 之前答错了，正在验证阶段
+        else if (status.wrongCount > 0 && !status.completed) {
+          status.correctCount++
+          // 验证答对两次，完成
+          if (status.correctCount >= 2) {
+            status.completed = true
+            crazyCompletedCount.value++
+          }
+          // 验证答对一次，在12题后再次验证
+          else if (status.correctCount === 1) {
+            const insertIndex = Math.min(currentIndex.value + 12, questions.value.length)
+            const currentQuestion = questions.value[currentIndex.value]
+            questions.value.splice(insertIndex, 0, currentQuestion)
+          }
+        }
+      } else {
+        // 答错
+        status.wrongCount++
+        // 重置验证计数
+        status.correctCount = 0
+        // 在8题后重新插入该题
+        const insertIndex = Math.min(currentIndex.value + 8, questions.value.length)
+        const currentQuestion = questions.value[currentIndex.value]
+        questions.value.splice(insertIndex, 0, currentQuestion)
+      }
+    }
+    
+    // 记忆刷题模式：只记录答案结果，不立即处理反馈（等点击下一题时处理）
+    if (practiceMode.value === 'memory') {
+      // 记录当前题目的答题结果，供下一题时使用
+      memoryLastAnswerCorrect.value = result.is_correct
+    }
   } catch (error) {
     console.error('Submit answer failed:', error)
+  }
+}
+
+// 记忆刷题提交反馈到后端
+const submitMemoryFeedback = async (recordId, feedback) => {
+  if (!recordId) return null
+  try {
+    const response = await axios.post('/api/practice-plan/feedback?user_id=default_user', {
+      record_id: recordId,
+      feedback: feedback
+    })
+    // 返回后端响应，以便更新进度
+    return response.data
+  } catch (error) {
+    console.error('Submit memory feedback failed:', error)
+    return null
   }
 }
 
@@ -827,10 +1233,282 @@ const prevQuestion = () => {
   }
 }
 
-const nextQuestion = () => {
+const nextQuestion = async () => {
+  // 记忆刷题模式：先处理当前题目的反馈，再切换到下一题
+  if (practiceMode.value === 'memory') {
+    // 立即隐藏题目内容，防止用户看到切换过程
+    isQuestionLoading.value = true
+    showAnswer.value = false
+    
+    // 等待 Vue 更新完成，确保题目内容已隐藏
+    await nextTick()
+    
+    // 处理当前题目的反馈
+    if (memoryLastAnswerCorrect.value !== null) {
+      const currentIdx = currentIndex.value
+      const currentQ = questions.value[currentIdx]
+      const actualQuestionId = currentQ.question_id
+      const status = memoryQuestionStatus.value[actualQuestionId]
+      
+      console.log('[记忆刷题] 处理反馈:', {
+        currentIdx,
+        actualQuestionId,
+        isCorrect: memoryLastAnswerCorrect.value,
+        statusBefore: status ? { ...status } : null,
+        questionCountBefore: questions.value.length
+      })
+      
+      if (status) {
+        console.log('[记忆刷题] 当前状态:', {
+          record_id: status.record_id,
+          correctAtLearning: status.correctAtLearning,
+          status: status.status,
+          completed: status.completed
+        })
+        
+        // 保存题目副本（用于重新插入）
+        const questionCopy = { ...currentQ }
+        
+        // 从数组中移除当前题目
+        questions.value.splice(currentIdx, 1)
+        
+        if (memoryLastAnswerCorrect.value) {
+          // 答对
+          const response = await submitMemoryFeedback(status.record_id, 'correct')
+          
+          console.log('[记忆刷题] submitMemoryFeedback 返回:', JSON.stringify(response))
+          // submitMemoryFeedback 返回 response.data，即 {status: 'ok', data: record.to_dict(), remaining: N}
+          // record.to_dict() 直接在 response.data 中
+          if (response && response.data) {
+            const recordData = response.data
+            if (recordData.correct_at_learning_count !== undefined) {
+              status.correctAtLearning = recordData.correct_at_learning_count
+            }
+            if (recordData.completed !== undefined) {
+              status.completed = recordData.completed
+            }
+            if (recordData.status) {
+              status.status = recordData.status
+            }
+            console.log('[记忆刷题] 后端返回数据:', recordData)
+          } else {
+            console.log('[记忆刷题] 无法读取后端数据: response=', response ? 'exists' : 'null')
+          }
+          
+          // 防御性修复：如果 correctAtLearning >= 2，强制设置完成状态
+          // 解决后端返回的 completed 值可能被覆盖的问题
+          if (status.correctAtLearning >= 2) {
+            status.completed = true
+            status.status = 'reviewing'
+            console.log('[记忆刷题] 强制设置完成状态: correctAtLearning =', status.correctAtLearning)
+          }
+          
+          if (status.status === 'learning') {
+            // 初学状态：检查是否需要重新插入
+            if (!status.completed) {
+              // 还未完成，需要重新插入
+              const insertIndex = Math.min(currentIdx + 12, questions.value.length)
+              console.log('[记忆刷题] 插入前 questionCopy 选项:', {
+                original_options: questionCopy.original_options,
+                original_answer: questionCopy.original_answer,
+                currentOptions: {
+                  A: questionCopy.option_a,
+                  B: questionCopy.option_b,
+                  C: questionCopy.option_c,
+                  D: questionCopy.option_d
+                }
+              })
+              const reshuffledQ = reshuffleQuestionOptions(questionCopy)
+              console.log('[记忆刷题] 插入后 reshuffledQ 选项:', {
+                shuffled_options: reshuffledQ.shuffled_options,
+                shuffled_answer: reshuffledQ.shuffled_answer,
+                newOptions: {
+                  A: reshuffledQ.option_a,
+                  B: reshuffledQ.option_b,
+                  C: reshuffledQ.option_c,
+                  D: reshuffledQ.option_d
+                }
+              })
+              questions.value.splice(insertIndex, 0, reshuffledQ)
+              console.log('[记忆刷题] 初学答对，插入到索引', insertIndex, 'correctAtLearning=', status.correctAtLearning)
+            } else {
+              // 完成，移出任务列表
+              console.log('[记忆刷题] 初学阶段完成，移出列表')
+              memoryCompletedCount.value++
+              memoryRemainCount.value--
+            }
+          } else {
+            // 复习中状态：做对一次完成当日任务
+            console.log('[记忆刷题] 复习中答对，完成当日任务，移出列表')
+            memoryCompletedCount.value++
+            memoryRemainCount.value--
+          }
+        } else {
+          // 答错
+          const response = await submitMemoryFeedback(status.record_id, 'wrong')
+          
+          console.log('[记忆刷题] 答错 submitMemoryFeedback 返回:', JSON.stringify(response))
+          // 使用后端返回的状态更新前端
+          if (response && response.data) {
+            const recordData = response.data
+            if (recordData.correct_at_learning_count !== undefined) {
+              status.correctAtLearning = recordData.correct_at_learning_count
+            }
+            if (recordData.status) {
+              status.status = recordData.status
+            }
+            if (recordData.completed !== undefined) {
+              status.completed = recordData.completed
+            }
+            console.log('[记忆刷题] 答错后端返回数据:', recordData)
+          }
+          
+          // 答错总是需要重新插入（安排在8题后）
+          const insertIndex = Math.min(currentIdx + 8, questions.value.length)
+          const reshuffledQ = reshuffleQuestionOptions(questionCopy)
+          questions.value.splice(insertIndex, 0, reshuffledQ)
+          console.log('[记忆刷题] 答错，插入到索引', insertIndex)
+        }
+      }
+      memoryLastAnswerCorrect.value = null
+    }
+    
+    // 检查是否所有题目都已完成
+    if (memoryCompletedCount.value >= memoryTotalCount.value) {
+      isQuestionLoading.value = false
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+      return
+    }
+    if (questions.value.length === 0) {
+      isQuestionLoading.value = false
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+      return
+    }
+    
+    // 从头开始找到第一个未完成的题目
+    let foundIdx = -1
+    for (let i = 0; i < questions.value.length; i++) {
+      const q = questions.value[i]
+      const questionId = q?.question_id
+      if (!questionId || !memoryQuestionStatus.value[questionId]?.completed) {
+        foundIdx = i
+        break
+      }
+    }
+    
+    if (foundIdx !== -1) {
+      currentIndex.value = foundIdx
+      await nextTick()
+      isQuestionLoading.value = false
+      resetQuestionState()
+      return
+    }
+    
+    // 所有题目都已完成
+    isQuestionLoading.value = false
+    if (memoryCompletedCount.value < memoryTotalCount.value) {
+      ElMessage.info('还有题目未完成，请继续答题')
+    } else {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+    }
+    return
+  }
+  
+  // 疯狂刷题模式：检查是否所有题目都已完成
+  if (practiceMode.value === 'crazy') {
+    if (crazyCompletedCount.value >= crazyTotalCount.value) {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+      return
+    }
+    if (questions.value.length === 0) {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+      return
+    }
+    
+    // 跳过已完成的题目，找到下一个未完成的题目
+    let nextIdx = currentIndex.value + 1
+    while (nextIdx < questions.value.length) {
+      const qId = questions.value[nextIdx]?.id
+      if (!qId || !crazyQuestionStatus.value[qId]?.completed) {
+        currentIndex.value = nextIdx
+        resetQuestionState()
+        return
+      }
+      nextIdx++
+    }
+    
+    // 到达末尾，检查是否还有未完成的题目
+    if (crazyCompletedCount.value < crazyTotalCount.value) {
+      ElMessage.info('还有题目未完成，请继续答题')
+    } else {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+    }
+    return
+  }
+  
+  // 记忆刷题模式：检查是否所有题目都已完成
+  if (practiceMode.value === 'memory') {
+    if (memoryCompletedCount.value >= memoryTotalCount.value) {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+      return
+    }
+    if (questions.value.length === 0) {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+      return
+    }
+    
+    // 跳过已完成的题目，找到下一个未完成的题目
+    let nextIdx = currentIndex.value + 1
+    while (nextIdx < questions.value.length) {
+      const q = questions.value[nextIdx]
+      const questionId = q?.question_id
+      if (!questionId || !memoryQuestionStatus.value[questionId]?.completed) {
+        currentIndex.value = nextIdx
+        resetQuestionState()
+        return
+      }
+      nextIdx++
+    }
+    
+    // 到达末尾，从开头重新检查是否有未完成的题目
+    nextIdx = 0
+    while (nextIdx < questions.value.length) {
+      const q = questions.value[nextIdx]
+      const questionId = q?.question_id
+      if (!questionId || !memoryQuestionStatus.value[questionId]?.completed) {
+        currentIndex.value = nextIdx
+        resetQuestionState()
+        return
+      }
+      nextIdx++
+    }
+    
+    // 所有题目都已完成
+    if (memoryCompletedCount.value < memoryTotalCount.value) {
+      ElMessage.info('还有题目未完成，请继续答题')
+    } else {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+    }
+    return
+  }
+  
   if (currentIndex.value < questions.value.length - 1) {
     currentIndex.value++
     resetQuestionState()
+  } else if (practiceMode.value === 'crazy') {
+    // 疯狂刷题模式：到达最后一题时检查是否还有未完成的题目
+    if (crazyCompletedCount.value < crazyTotalCount.value) {
+      ElMessage.info('还有题目未完成，请继续答题')
+    } else {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+    }
+  } else if (practiceMode.value === 'memory') {
+    // 记忆刷题模式：检查是否还有未完成的题目
+    if (memoryCompletedCount.value < memoryTotalCount.value) {
+      ElMessage.info('还有题目未完成，请继续答题')
+    } else {
+      ElMessage.success('🎉 恭喜！所有题目已完成！')
+    }
   }
 }
 
@@ -840,9 +1518,19 @@ const goToQuestion = (index) => {
 }
 
 const resetQuestionState = () => {
+  // 记忆刷题模式：每次切换题目都隐藏答案，让用户重新作答
+  if (practiceMode.value === 'memory') {
+    showAnswer.value = false
+    lastCorrectAnswer.value = ''
+    checkFavorite()
+    return
+  }
   showAnswer.value = answeredQuestions.value[currentIndex.value] !== undefined
   lastCorrectAnswer.value = ''
   checkFavorite()
+  if (config.distinguishMode && questions.value[currentIndex.value]?.id) {
+    checkDistinguishStatus(questions.value[currentIndex.value].id)
+  }
 }
 
 const startPractice = async () => {
@@ -940,12 +1628,224 @@ const startPractice = async () => {
         console.log('DEBUG: Practice result:', result)
         questions.value = result.data || []
       }
+    } else if (practiceMode.value === 'crazy') {
+      // 疯狂刷题模式
+      const params = { per_page: 10000 }
+      if (config.chapterIds.length > 0) {
+        params.chapter_ids = config.chapterIds
+      }
+      result = await store.practiceMemorize(params)
+      questions.value = result.data
+      
+      // 打乱题目顺序（如果配置了）
+      if (config.shuffleQuestions) {
+        questions.value = shuffleArray(questions.value)
+      }
+      
+      // 初始化疯狂刷题状态
+      crazyQuestionStatus.value = {}
+      questions.value.forEach(q => {
+        crazyQuestionStatus.value[q.id] = {
+          correctCount: 0,
+          wrongCount: 0,
+          completed: false
+        }
+      })
+      crazyTotalCount.value = questions.value.length
+      crazyCompletedCount.value = 0
+    } else if (practiceMode.value === 'memory') {
+      // 记忆刷题模式：从刷题规划获取任务
+      try {
+        const response = await axios.get('/api/practice-plan/tasks', {
+          params: {
+            user_id: store.userId
+          }
+        })
+        
+        if (response.data.status === 'ok') {
+          const tasks = response.data.data || []
+          
+          if (tasks.length === 0) {
+            ElMessage.warning('暂无刷题任务，请在刷题规划中添加题目')
+            return
+          }
+          
+          // 初始化记忆刷题队列
+          memoryQuestionStatus.value = {}
+          memoryQueue.value = []
+          
+          // 分离初学中和复习中的题目
+          const learningTasks = tasks.filter(t => t.status === 'learning')
+          const reviewingTasks = tasks.filter(t => t.status === 'reviewing')
+          
+          // 初学中题目：按加入顺序，不打乱
+          // 根据 learning_repetition 安排题目位置
+          // 先处理 learning_repetition = 0 的题目（立即出现）
+          // 再处理 learning_repetition > 0 的题目（安排在指定位置）
+          const immediateTasks = learningTasks.filter(t => t.learning_repetition === 0)
+          const delayedTasks = learningTasks.filter(t => t.learning_repetition > 0)
+          
+          // 立即出现的题目
+          immediateTasks.forEach(t => {
+            const isCompleted = t.correct_at_learning_count >= 2
+            memoryQuestionStatus.value[t.question_id] = {
+              correctAtLearning: t.correct_at_learning_count || 0,
+              wrongCount: 0,
+              completed: isCompleted,
+              status: isCompleted ? 'completed' : 'learning',
+              record_id: t.id,
+              waitingForRepeat: 0,
+              needVerify: t.correct_at_learning_count >= 1,
+              verified: isCompleted
+            }
+            // 只有未完成的题目才加入队列
+            if (!isCompleted) {
+              memoryQueue.value.push(t.question_id)
+            }
+          })
+          
+          // 延迟出现的题目（安排在指定位置）
+          delayedTasks.forEach(t => {
+            const isCompleted = t.correct_at_learning_count >= 2
+            memoryQuestionStatus.value[t.question_id] = {
+              correctAtLearning: t.correct_at_learning_count || 0,
+              wrongCount: 0,
+              completed: isCompleted,
+              status: isCompleted ? 'completed' : 'learning',
+              record_id: t.id,
+              waitingForRepeat: t.learning_repetition,
+              needVerify: t.correct_at_learning_count >= 1,
+              verified: isCompleted
+            }
+            // 只有未完成的题目才加入队列
+            if (!isCompleted) {
+              // 安排在队列的指定位置（末尾）
+              memoryQueue.value.push(t.question_id)
+            }
+          })
+          
+          // 复习中题目：打乱顺序
+          const shuffledReviewing = shuffleArray([...reviewingTasks])
+          shuffledReviewing.forEach(t => {
+            memoryQuestionStatus.value[t.question_id] = {
+              correctAtLearning: 0,
+              wrongCount: 0,
+              completed: false,
+              status: 'reviewing',
+              record_id: t.id
+            }
+            memoryQueue.value.push(t.question_id)
+          })
+          
+          // 后端返回的to_dict已经是扁平化数据，题目字段直接在同一层级
+          // 构建questionId到task的映射
+          const questionMap = {}
+          tasks.forEach(t => {
+            questionMap[t.question_id] = t
+          })
+          
+          // 按队列顺序重新排列
+          questions.value = memoryQueue.value.map(qid => questionMap[qid]).filter(q => q)
+          
+          // 计算已完成和剩余题目数量
+          let initialCompleted = 0
+          let initialRemaining = 0
+          memoryQueue.value.forEach(qid => {
+            const status = memoryQuestionStatus.value[qid]
+            if (status) {
+              if (status.completed) {
+                initialCompleted++
+              } else {
+                initialRemaining++
+              }
+            }
+          })
+          memoryTotalCount.value = initialCompleted + initialRemaining
+          memoryCompletedCount.value = initialCompleted
+          memoryRemainCount.value = initialRemaining
+          
+          // 打乱复习题目的选项（初学题目不打乱选项）
+          questions.value.forEach((q, idx) => {
+            if (memoryQuestionStatus.value[q.question_id]?.status === 'reviewing') {
+              // 复习题目：打乱选项
+              if (q.option_a && q.option_b) {
+                // 获取原始选项和答案的对应关系
+                const originalAnswer = q.answer.toUpperCase()
+                const optKeys = ['option_a', 'option_b', 'option_c', 'option_d', 'option_e', 'option_f']
+                const originalOptions = {}
+                optKeys.forEach((k, i) => {
+                  if (q[k]) {
+                    originalOptions[String.fromCharCode(65 + i)] = q[k] // A, B, C, D...
+                  }
+                })
+                
+                // 获取选项值数组
+                const optValues = optKeys.map(k => q[k]).filter(v => v)
+                // 打乱选项值
+                const shuffled = shuffleArray([...optValues])
+                
+                // 创建新的选项映射
+                const newOptions = {}
+                const letterMap = {} // 记录哪个位置对应哪个字母
+                shuffled.forEach((val, i) => {
+                  const letter = String.fromCharCode(97 + i) // a, b, c, d...
+                  const upperLetter = letter.toUpperCase()
+                  newOptions[letter] = val
+                  // 找出这个值原来对应的字母
+                  for (const [origLetter, origVal] of Object.entries(originalOptions)) {
+                    if (origVal === val) {
+                      letterMap[origLetter] = upperLetter
+                      break
+                    }
+                  }
+                })
+                
+                // 构建打乱后的题目
+                const shuffledQuestion = { 
+                  ...q,
+                  // 保存原始选项和原始答案，以便再次打乱时使用
+                  original_options: originalOptions,
+                  original_answer: originalAnswer,
+                  option_a: newOptions.a || null,
+                  option_b: newOptions.b || null,
+                  option_c: newOptions.c || null,
+                  option_d: newOptions.d || null,
+                  option_e: newOptions.e || null,
+                  option_f: newOptions.f || null,
+                  shuffled_options: ['A', 'B', 'C', 'D', 'E', 'F'].slice(0, shuffled.length).map((label, i) => ({
+                    label,
+                    content: shuffled[i]
+                  })),
+                  shuffled_answer: letterMap[originalAnswer] || q.answer
+                }
+                questions.value[idx] = shuffledQuestion
+              }
+            }
+          })
+          
+          ElMessage.success(`已加载 ${questions.value.length} 道刷题任务`)
+        } else {
+          ElMessage.warning('获取刷题任务失败')
+          return
+        }
+      } catch (error) {
+        console.error('ERROR: Failed to load practice plan tasks:', error)
+        ElMessage.error('加载刷题任务失败')
+        return
+      }
     }
 
     practiceStarted.value = true
-    totalQuestions.value = result.total || questions.value.length
+    if (practiceMode.value === 'memory') {
+      totalQuestions.value = memoryTotalCount.value
+    } else {
+      totalQuestions.value = result.total || questions.value.length
+    }
     showAnswer.value = practiceMode.value === 'memorize'
     await checkFavorite()
+    if (config.distinguishMode && questions.value.length > 0) {
+      await checkDistinguishStatus(questions.value[0].id)
+    }
   } catch (error) {
     console.error('ERROR: Failed to start practice:', error)
     if (error.response) {
@@ -990,6 +1890,22 @@ const isInWrongBook = (questionId) => {
   return isInWrongBookMap.value[questionId] || false
 }
 
+const isInDistinguish = (questionId) => {
+  return isInDistinguishMap.value[questionId] || false
+}
+
+const checkDistinguishStatus = async (questionId) => {
+  if (!questionId) return false
+  try {
+    const res = await axios.get(`/api/distinguish/check/${questionId}`)
+    isInDistinguishMap.value[questionId] = res.data.exists || false
+    return res.data.exists
+  } catch (e) {
+    console.error(e)
+    return false
+  }
+}
+
 const addToWrongBook = async () => {
   if (!currentQuestion.value?.id) return
   try {
@@ -1020,16 +1936,28 @@ const toggleMastered = () => {
 }
 
 const finishPractice = () => {
-  const totalQuestions = questions.value.length
-  const answeredCount = Object.keys(answeredQuestions.value).length
-  const correctCount = Object.values(answeredQuestions.value).filter((answer, idx) => {
-    const q = questions.value[idx]
-    const correctAnswer = q?.shuffled_options ? (q?.shuffled_answer || '') : (q?.answer || '')
-    return correctAnswer.toUpperCase().includes(answer?.toUpperCase())
-  }).length
-  const wrongCount = answeredCount - correctCount
-  const skippedCount = totalQuestions - answeredCount
-  const accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0
+  let totalQuestions, answeredCount, correctCount, wrongCount, skippedCount, accuracy
+  
+  if (practiceMode.value === 'memory') {
+    // 记忆刷题模式统计
+    totalQuestions = memoryTotalCount.value
+    answeredCount = memoryCompletedCount.value
+    correctCount = memoryCompletedCount.value // 在记忆刷题模式下，完成即代表正确
+    wrongCount = 0
+    skippedCount = totalQuestions - answeredCount
+    accuracy = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0
+  } else {
+    totalQuestions = questions.value.length
+    answeredCount = Object.keys(answeredQuestions.value).length
+    correctCount = Object.values(answeredQuestions.value).filter((answer, idx) => {
+      const q = questions.value[idx]
+      const correctAnswer = q?.shuffled_options ? (q?.shuffled_answer || '') : (q?.answer || '')
+      return correctAnswer.toUpperCase().includes(answer?.toUpperCase())
+    }).length
+    wrongCount = answeredCount - correctCount
+    skippedCount = totalQuestions - answeredCount
+    accuracy = answeredCount > 0 ? Math.round((correctCount / answeredCount) * 100) : 0
+  }
 
   let grade = ''
   let gradeIcon = ''
@@ -1072,14 +2000,18 @@ const finishPractice = () => {
     memorize: '背题模式',
     sequential: '顺序刷题',
     random: '随机出题',
-    wrong: '错题练习'
+    wrong: '错题练习',
+    crazy: '疯狂刷题',
+    memory: '记忆刷题'
   }
 
   const modeColors = {
     memorize: '#8b5cf6',
     sequential: '#06b6d4',
     random: '#f59e0b',
-    wrong: '#ef4444'
+    wrong: '#ef4444',
+    crazy: '#ec4899',
+    memory: '#10b981'
   }
 
   const resultHTML = `
@@ -1356,6 +2288,11 @@ onMounted(async () => {
     if (practiceMode.value === 'wrong' && (route.query.chapters || route.query.mode === 'wrong_selected')) {
       await startPractice()
     }
+    
+    // 记忆刷题模式：自动开始加载任务，无需点击开始按钮
+    if (practiceMode.value === 'memory') {
+      await startPractice()
+    }
   } catch (error) {
     console.error('初始化失败:', error)
     ElMessage.error('页面加载失败，请刷新重试')
@@ -1363,7 +2300,7 @@ onMounted(async () => {
 })
 
 // 监听刷题模式变化，重置组件状态
-watch(practiceMode, (newMode, oldMode) => {
+watch(practiceMode, async (newMode, oldMode) => {
   if (newMode !== oldMode) {
     // 重置所有状态
     questions.value = []
@@ -1378,6 +2315,11 @@ watch(practiceMode, (newMode, oldMode) => {
     config.chapterIds = []
     isEditMode.value = false
     isExplanationEdit.value = false
+    
+    // 记忆刷题模式：自动开始加载任务
+    if (newMode === 'memory') {
+      await startPractice()
+    }
   }
 })
 
@@ -1406,6 +2348,60 @@ const bindImageClickEvents = () => {
       openImagePreview(img.src)
     }
   })
+}
+
+
+// 辨析题相关函数
+const openDistinguishDialog = () => {
+  const q = currentQuestion.value
+  if (!q) return
+  distinguishQuestionData.value = {
+    id: q.id,
+    stem: q.stem,
+    stem_html: q.stem_html,
+    explanation: q.explanation,
+    explanation_html: q.explanation_html
+  }
+  const optionKeys = ['option_a', 'option_b', 'option_c', 'option_d', 'option_e', 'option_f']
+  distinguishOptions.value = []
+  for (const key of optionKeys) {
+    if (q[key]) {
+      distinguishOptions.value.push({
+        key: key.replace('option_', '').toUpperCase(),
+        text: q[key],
+        is_correct: true,
+        corrected_text: ''
+      })
+    }
+  }
+  showDistinguishDialog.value = true
+}
+
+const toggleOptionCorrect = (idx) => {
+  distinguishOptions.value[idx].is_correct = !distinguishOptions.value[idx].is_correct
+}
+
+const saveDistinguishQuestion = async () => {
+  const q = distinguishQuestionData.value
+  if (!q) return
+  try {
+    const { default: axios } = await import('axios')
+    await axios.post('/api/distinguish/save', {
+      question_id: q.id,
+      options: distinguishOptions.value.map(o => ({
+        key: o.key,
+        text: o.text,
+        is_correct: o.is_correct,
+        corrected_text: o.is_correct ? null : (o.corrected_text || null)
+      }))
+    })
+    showDistinguishDialog.value = false
+    isInDistinguishMap.value[q.id] = true
+    alert('已添加到辨析题管理')
+  } catch (e) {
+    console.error(e)
+    alert('保存失败')
+  }
 }
 </script>
 
@@ -1999,6 +2995,76 @@ const bindImageClickEvents = () => {
   font-size: 14px;
 }
 
+.crazy-rules {
+  margin-top: 16px;
+  padding: 12px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 8px;
+  border: 1px solid #fbbf24;
+}
+
+.crazy-rules h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.crazy-rules ul {
+  margin: 0;
+  padding-left: 20px;
+  list-style: none;
+}
+
+.crazy-rules li {
+  font-size: 13px;
+  color: #78350f;
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.memory-rules {
+  margin-top: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-radius: 10px;
+  border: 1px solid #10b981;
+}
+
+.memory-rules h4 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #065f46;
+}
+
+.memory-rules ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memory-rules li {
+  font-size: 14px;
+  color: #047857;
+  line-height: 1.8;
+  margin-bottom: 6px;
+  padding-left: 8px;
+  position: relative;
+}
+
+.memory-rules li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 4px;
+  height: 4px;
+  background: #10b981;
+  border-radius: 50%;
+}
+
 .config-header {
   display: flex;
   justify-content: space-between;
@@ -2241,6 +3307,20 @@ const bindImageClickEvents = () => {
   line-height: 1.8;
   margin-bottom: 30px;
   /* 字体大小通过内联样式控制，不在这里设置 */
+}
+
+.question-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #909399;
+  font-size: 16px;
+  gap: 10px;
+}
+
+.question-loading .el-icon {
+  font-size: 20px;
 }
 
 /* 确保题干内图片完全自适应 */
@@ -2964,5 +4044,237 @@ const bindImageClickEvents = () => {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4) !important;
   background: linear-gradient(135deg, #7c8ff5 0%, #8a5db8 100%) !important;
+}
+
+/* 辨析题弹窗样式 */
+.distinguish-dialog-container {
+  border-radius: 16px !important;
+  overflow: hidden !important;
+}
+
+.distinguish-dialog-container .el-dialog__body {
+  padding: 0 !important;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.distinguish-dialog {
+  padding: 0;
+}
+
+.distinguish-dialog .dialog-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.distinguish-dialog .dialog-icon {
+  width: 56px;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.distinguish-dialog .dialog-title-section h3 {
+  color: white;
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 6px 0;
+}
+
+.distinguish-dialog .dialog-subtitle {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  margin: 0;
+}
+
+.distinguish-dialog .dialog-content {
+  padding: 24px 32px;
+}
+
+.distinguish-dialog .stem-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+  border: 1px solid #e2e8f0;
+}
+
+.distinguish-dialog .stem-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.distinguish-dialog .stem-content {
+  font-size: 16px;
+  line-height: 1.8;
+  color: #1e293b;
+}
+
+.distinguish-dialog .options-section {
+  margin-bottom: 24px;
+}
+
+.distinguish-dialog .options-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #475569;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 16px;
+}
+
+.distinguish-dialog .option-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  border: 2px solid #e2e8f0;
+  transition: all 0.3s ease;
+}
+
+.distinguish-dialog .option-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.distinguish-dialog .option-card.wrong {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.distinguish-dialog .option-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.distinguish-dialog .option-key {
+  font-weight: 700;
+  font-size: 16px;
+  color: #334155;
+  min-width: 28px;
+}
+
+.distinguish-dialog .option-text {
+  flex: 1;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #1e293b;
+}
+
+.distinguish-dialog .toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.distinguish-dialog .toggle-btn.correct {
+  background: linear-gradient(135deg, #86efac 0%, #4ade80 100%);
+  color: #166534;
+}
+
+.distinguish-dialog .toggle-btn.correct:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.4);
+}
+
+.distinguish-dialog .toggle-btn.wrong {
+  background: linear-gradient(135deg, #fca5a5 0%, #f87171 100%);
+  color: #991b1b;
+}
+
+.distinguish-dialog .toggle-btn.wrong:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(248, 113, 113, 0.4);
+}
+
+.distinguish-dialog .corrected-input-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed #fecaca;
+}
+
+.distinguish-dialog .corrected-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.distinguish-dialog .explanation-card {
+  background: linear-gradient(135deg, #fefce8 0%, #fef9c3 100%);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #fde68a;
+}
+
+.distinguish-dialog .explanation-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+.distinguish-dialog .explanation-content {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #78350f;
+}
+
+.distinguish-dialog .dialog-footer {
+  padding: 16px 32px 24px;
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+}
+
+.distinguish-dialog .cancel-btn {
+  padding: 12px 32px;
+  font-size: 15px;
+  font-weight: 500;
+  border-radius: 10px;
+}
+
+.distinguish-dialog .save-btn {
+  padding: 12px 40px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  border: none !important;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transition: all 0.3s ease;
+}
+
+.distinguish-dialog .save-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
 }
 </style>

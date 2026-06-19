@@ -322,7 +322,8 @@ const modeTitle = computed(() => {
   const titles = {
     sequential: '顺序刷题',
     random: '随机出题',
-    wrong: '错题练习'
+    wrong: '错题练习',
+    crazy: '疯狂刷题'
   }
   return titles[practiceMode.value] || '刷题练习'
 })
@@ -331,14 +332,16 @@ const modeTitle = computed(() => {
 const modeColors = {
   sequential: '#06b6d4',
   random: '#f59e0b',
-  wrong: '#ef4444'
+  wrong: '#ef4444',
+  crazy: '#ec4899'
 }
 
 // 模式名称
 const modeNames = {
   sequential: '顺序刷题',
   random: '随机出题',
-  wrong: '错题练习'
+  wrong: '错题练习',
+  crazy: '疯狂刷题'
 }
 
 // 计算正确率

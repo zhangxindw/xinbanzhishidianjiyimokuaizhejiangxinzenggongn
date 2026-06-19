@@ -73,6 +73,14 @@
               <el-icon><WarnTriangleFilled /></el-icon>
               错题练习
             </el-button>
+            <el-button type="info" @click="$router.push('/practice/crazy')">
+              <el-icon><Lightning /></el-icon>
+              疯狂刷题
+            </el-button>
+            <el-button type="success" @click="$router.push('/practice/memory')">
+              <el-icon><Memo /></el-icon>
+              记忆刷题
+            </el-button>
           </div>
         </div>
       </el-col>

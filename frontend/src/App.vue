@@ -57,6 +57,14 @@
               <el-icon><WarnTriangleFilled /></el-icon>
               错题练习
             </div>
+            <div class="sidebar-menu-item" @click="$router.push('/practice/crazy')">
+              <el-icon><Lightning /></el-icon>
+              疯狂刷题
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/practice/memory')">
+              <el-icon><Memo /></el-icon>
+              记忆刷题
+            </div>
           </li>
           <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/memory') && !$route.path.includes('/mobile') }" @click="showMemoryMenu = !showMemoryMenu">
             <el-icon><Star /></el-icon>
@@ -76,9 +84,32 @@
               <el-icon><Calendar /></el-icon>
               记忆规划
             </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/practice/plan')">
+              <el-icon><Collection /></el-icon>
+              刷题规划
+            </div>
             <div class="sidebar-menu-item" @click="$router.push('/memory/dictation')">
               <el-icon><EditPen /></el-icon>
               默写练习
+            </div>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('distinguish') }" @click="showDistinguishMenu = !showDistinguishMenu">
+            <el-icon><Warning /></el-icon>
+            <span v-if="!sidebarCollapsed">辨析判断</span>
+            <el-icon v-if="!sidebarCollapsed"><ArrowDown v-if="!showDistinguishMenu" /><ArrowUp v-else /></el-icon>
+          </li>
+          <li v-if="showDistinguishMenu && !sidebarCollapsed" class="sidebar-submenu">
+            <div class="sidebar-menu-item" @click="$router.push('/distinguish/management')">
+              <el-icon><List /></el-icon>
+              辨析题管理
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/distinguish/plan')">
+              <el-icon><Calendar /></el-icon>
+              辨析规划
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/distinguish/memory')">
+              <el-icon><RefreshRight /></el-icon>
+              辨析记忆
             </div>
           </li>
           <li class="sidebar-menu-item" :class="{ active: $route.path === '/wrong-questions' }" @click="$router.push('/wrong-questions')">
@@ -121,12 +152,13 @@ import {
   HomeFilled, Document, Upload, Folder, Collection, Reading, Memo, 
   Sort, RefreshRight, WarnTriangleFilled, CircleClose, Star, 
   DataAnalysis, Setting, DArrowLeft, DArrowRight, ArrowDown, ArrowUp,
-  Calendar, EditPen, Iphone
+  Calendar, EditPen, Iphone, Warning, List, Lightning
 } from '@element-plus/icons-vue'
 
 const store = useQuizStore()
 const showPracticeMenu = ref(false)
 const showMemoryMenu = ref(false)
+const showDistinguishMenu = ref(false)
 const sidebarCollapsed = ref(false)
 
 const eyeProtectionClass = computed(() => {

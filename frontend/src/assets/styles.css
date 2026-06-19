@@ -30,7 +30,7 @@ body {
 
 /* 确保所有元素默认都使用固定字体大小 */
 body * {
-  font-size: 14px !important;
+  font-size: 14px;
 }
 
 .eye-protection-warm {
