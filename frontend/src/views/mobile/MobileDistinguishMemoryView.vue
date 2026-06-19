@@ -121,7 +121,7 @@
           <div class="result-title">练习完成</div>
         </div>
         <div class="result-content">
-          <div class="tip-card" style="borderLeftColor: #f59e0b">
+          <div class="tip-card" style="border-left-color: #f59e0b">
             <div class="tip-header">
               <span class="tip-icon">💡</span>
               <span class="tip-title" style="color: #f59e0b">今日任务已完成</span>
