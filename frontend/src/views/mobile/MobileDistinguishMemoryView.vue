@@ -153,18 +153,24 @@ const currentTask = computed(() => tasks.value[currentIndex.value] || null)
 const answered = ref(false)
 const isCorrect = ref(false)
 const fontSize = ref(localStorage.getItem('practiceFontSize') || 'normal')
+const taskRemoved = ref(false)
 
 const loadTasks = async () => {
   loading.value = true
   try {
     const res = await axios.get('/api/distinguish/plan/tasks', {
-      params: { user_id: store.userId || 'default_user' }
+      params: { t: Date.now() }
     })
     
     if (res.data.status === 'ok') {
       tasks.value = res.data.data || []
-      currentIndex.value = 0
+    } else {
+      tasks.value = res.data.data || []
     }
+    currentIndex.value = 0
+    answered.value = false
+    isCorrect.value = false
+    taskRemoved.value = false
   } catch (e) {
     console.error('Failed to load tasks:', e)
   }
@@ -172,34 +178,78 @@ const loadTasks = async () => {
 }
 
 const submitAnswer = async (feedback) => {
-  if (!currentTask.value) return
+  const task = currentTask.value
+  if (!task) return
   
-  answered.value = true
+  const userChoseCorrect = feedback === 'remembered'
+  isCorrect.value = userChoseCorrect === task.is_correct
   
-  // 判断是否正确
-  const userSaidCorrect = feedback === 'remembered'
-  isCorrect.value = userSaidCorrect === currentTask.value.is_correct
-  
-  // 提交反馈到后端
   try {
-    await axios.post('/api/distinguish/plan/feedback', {
-      record_id: currentTask.value.id,
+    const res = await axios.post('/api/distinguish/plan/feedback', {
+      record_id: task.id,
       feedback: feedback,
       user_id: store.userId || 'default_user'
     })
+    
+    const repeatInfo = res.data.repeat_info
+    if (repeatInfo && repeatInfo.interval !== undefined) {
+      const interval = repeatInfo.interval
+      
+      tasks.value.splice(currentIndex.value, 1)
+      
+      const insertPos = currentIndex.value + interval - 1
+      
+      if (insertPos >= tasks.value.length) {
+        tasks.value.push(task)
+      } else if (insertPos < 0) {
+        tasks.value.unshift(task)
+      } else {
+        tasks.value.splice(insertPos, 0, task)
+      }
+      
+      if (currentIndex.value >= tasks.value.length) {
+        currentIndex.value = 0
+      }
+      
+      taskRemoved.value = true
+      answered.value = true
+    } else {
+      taskRemoved.value = false
+      answered.value = true
+    }
   } catch (e) {
     console.error('Submit feedback failed:', e)
+    answered.value = true
   }
 }
 
 const nextQuestion = () => {
-  if (currentIndex.value < tasks.value.length - 1) {
+  if (taskRemoved.value) {
+    taskRemoved.value = false
+    answered.value = false
+    isCorrect.value = false
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    return
+  }
+  
+  if (currentIndex.value + 1 < tasks.value.length) {
     currentIndex.value++
     answered.value = false
     isCorrect.value = false
     window.scrollTo({ top: 0, behavior: 'smooth' })
   } else {
-    currentIndex.value = tasks.value.length
+    const hasDuplicates = tasks.value.some((task, index) => {
+      return tasks.value.slice(index + 1).some(t => t.id === task.id)
+    })
+    
+    if (hasDuplicates) {
+      currentIndex.value = 0
+      answered.value = false
+      isCorrect.value = false
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } else {
+      currentIndex.value = tasks.value.length
+    }
   }
 }
 
