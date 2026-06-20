@@ -1,0 +1,131 @@
+﻿<template>
+  <!-- 鎵嬫満绔竷灞€ -->
+  <MobileLayout v-if="$route.meta.mobile" />
+  
+  <!-- 鐢佃剳绔竷灞€ -->
+  <div v-else class="app-container" :class="eyeProtectionClass">
+    <div class="main-layout">
+      <aside class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+        <div class="sidebar-logo">
+          <h1 v-if="!sidebarCollapsed">馃摎 鍦ㄧ嚎棰樺簱</h1>
+          <span v-else class="sidebar-logo-icon">馃摎</span>
+        </div>
+        <ul class="sidebar-menu">
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/home' }" @click="$router.push('/home')">
+            <el-icon><HomeFilled /></el-icon>
+            <span v-if="!sidebarCollapsed">棣栭〉</span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/questions' }" @click="$router.push('/questions')">
+            <el-icon><Document /></el-icon>
+            <span v-if="!sidebarCollapsed">棰樺簱绠＄悊</span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/knowledge-points' }" @click="$router.push('/knowledge-points')">
+            <el-icon><Document /></el-icon>
+            <span v-if="!sidebarCollapsed">鐭ヨ瘑鐐?/span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/import' }" @click="$router.push('/import')">
+            <el-icon><Upload /></el-icon>
+            <span v-if="!sidebarCollapsed">Excel瀵煎叆</span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/chapters' }" @click="$router.push('/chapters')">
+            <el-icon><Folder /></el-icon>
+            <span v-if="!sidebarCollapsed">绔犺妭绠＄悊</span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/question-types' }" @click="$router.push('/question-types')">
+            <el-icon><Collection /></el-icon>
+            <span v-if="!sidebarCollapsed">棰樺瀷绠＄悊</span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/practice') && !$route.path.includes('/mobile') }" @click="showPracticeMenu = !showPracticeMenu">
+            <el-icon><Reading /></el-icon>
+            <span v-if="!sidebarCollapsed">鍒烽缁冧範</span>
+            <el-icon v-if="!sidebarCollapsed"><ArrowDown v-if="!showPracticeMenu" /><ArrowUp v-else /></el-icon>
+          </li>
+          <li v-if="showPracticeMenu && !sidebarCollapsed" class="sidebar-submenu">
+            <div class="sidebar-menu-item" @click="$router.push('/practice/memorize')">
+              <el-icon><Memo /></el-icon>
+              鑳岄妯″紡
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/practice/sequential')">
+              <el-icon><Sort /></el-icon>
+              椤哄簭鍒烽
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/practice/random')">
+              <el-icon><RefreshRight /></el-icon>
+              闅忔満鍑洪
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/practice/wrong')">
+              <el-icon><WarnTriangleFilled /></el-icon>
+              閿欓缁冧範
+            </div>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path.includes('/memory') && !$route.path.includes('/mobile') }" @click="showMemoryMenu = !showMemoryMenu">
+            <el-icon><Star /></el-icon>
+            <span v-if="!sidebarCollapsed">璁板繂妯″潡</span>
+            <el-icon v-if="!sidebarCollapsed"><ArrowDown v-if="!showMemoryMenu" /><ArrowUp v-else /></el-icon>
+          </li>
+          <li v-if="showMemoryMenu && !sidebarCollapsed" class="sidebar-submenu">
+            <div class="sidebar-menu-item" @click="$router.push('/knowledge-points')">
+              <el-icon><Document /></el-icon>
+              鐭ヨ瘑鐐圭鐞?            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/practice')">
+              <el-icon><RefreshRight /></el-icon>
+              璁板繂缁冧範
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/plan')">
+              <el-icon><Calendar /></el-icon>
+              璁板繂瑙勫垝
+            </div>
+            <div class="sidebar-menu-item" @click="$router.push('/memory/dictation')">
+              <el-icon><EditPen /></el-icon>
+              榛樺啓缁冧範
+            </div>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/wrong-questions' }" @click="$router.push('/wrong-questions')">
+            <el-icon><CircleClose /></el-icon>
+            <span v-if="!sidebarCollapsed">閿欓鏈?/span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/favorites' }" @click="$router.push('/favorites')">
+            <el-icon><Star /></el-icon>
+            <span v-if="!sidebarCollapsed">鏀惰棌澶?/span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/statistics' }" @click="$router.push('/statistics')">
+            <el-icon><DataAnalysis /></el-icon>
+            <span v-if="!sidebarCollapsed">鏁版嵁缁熻</span>
+          </li>
+          <li class="sidebar-menu-item" :class="{ active: $route.path === '/settings' }" @click="$router.push('/settings')">
+            <el-icon><Setting /></el-icon>
+            <span v-if="!sidebarCollapsed">璁剧疆</span>
+          </li>
+          <li class="sidebar-menu-item mobile-entry" :class="{ active: $route.path.startsWith('/mobile') }" @click="$router.push('/mobile')">
+            <el-icon><Iphone /></el-icon>
+            <span v-if="!sidebarCollapsed">鎵嬫満绔?/span>
+          </li>
+        </ul>
+        <div class="sidebar-toggle" @click="sidebarCollapsed = !sidebarCollapsed">
+          <el-icon><DArrowLeft v-if="!sidebarCollapsed" /><DArrowRight v-else /></el-icon>
+        </div>
+      </aside>
+      <main class="main-content" :class="{ expanded: sidebarCollapsed }">
+        <router-view />
+      </main>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+import { useQuizStore } from '@/store/quiz'
+import MobileLayout from '@/layouts/MobileLayout.vue'
+import { 
+  HomeFilled, Document, Upload, Folder, Collection, Reading, Memo, 
+  Sort, RefreshRight, WarnTriangleFilled, CircleClose, Star, 
+  DataAnalysis, Setting, DArrowLeft, DArrowRight, ArrowDown, ArrowUp,
+  Calendar, EditPen, Iphone
+} from '@element-plus/icons-vue'
+
+const store = useQuizStore()
+const showPracticeMenu = ref(false)
+const showMemoryMenu = ref(false)
+const sidebarCollapsed = ref(false)
+
+

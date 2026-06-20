@@ -59,7 +59,7 @@
         </div>
         <div class="crazy-rules">
           <ul>
-            <li>每道题需连续答对两次才能完成</li>
+            <li>首次答对即完成移出队列</li>
             <li>答错的题目会重新插入队列</li>
             <li>答对一次后题目会再次出现验证</li>
             <li>完成所有题目才算通关</li>
@@ -120,8 +120,8 @@
               <span class="answer-value">{{ currentQuestion.answer }}</span>
             </div>
             <div class="status-info">
-              <span v-if="currentQuestionStatus.isFirstAttempt && !currentQuestionStatus.completed" class="status-badge new">新</span>
-              <span v-else-if="!currentQuestionStatus.isFirstAttempt && currentQuestionStatus.correctCount === 1" class="status-badge pending">1/2</span>
+              <span v-if="currentQuestionStatus.isFirstAttempt && !currentQuestionStatus.completed" class="status-badge new">新刷</span>
+              <span v-else-if="!currentQuestionStatus.isFirstAttempt && currentQuestionStatus.correctCount === 1" class="status-badge pending">完成</span>
               <span v-else-if="!currentQuestionStatus.isFirstAttempt && currentQuestionStatus.correctCount === 0 && currentQuestionStatus.wrongCount > 0" class="status-badge wrong">重做</span>
               <span v-else-if="currentQuestionStatus.completed" class="status-badge completed">✓</span>
             </div>

@@ -129,9 +129,6 @@
             <span class="feature-name">记忆练习</span>
             <span class="feature-desc">科学记忆曲线复习</span>
           </div>
-          <div class="feature-arrow">
-            <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M716.8 537.6a12.8 12.8 0 0 1 0 17.92L332.8 940.8a12.8 12.8 0 0 1-17.92-17.92l371.2-371.2-371.2-371.2a12.8 12.8 0 1 1 17.92-17.92z"></path></svg>
-          </div>
         </div>
         <div class="feature-card memory-practice" @click="goToPracticeMemory">
           <div class="feature-bg"></div>
