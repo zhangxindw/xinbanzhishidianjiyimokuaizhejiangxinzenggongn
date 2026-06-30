@@ -1023,7 +1023,7 @@ const restoreSavedState = async () => {
   const saved = store.getSavedPracticeSession(practiceMode.value)
   if (saved && saved.practiceStarted) {
     try {
-      const { value } = await ElMessageBox.confirm(
+      await ElMessageBox.confirm(
         '检测到您有未完成的刷题进程，是否继续？',
         '提示',
         {
@@ -1032,22 +1032,17 @@ const restoreSavedState = async () => {
           type: 'info'
         }
       )
-      if (value) {
-        // 恢复状态
-        questions.value = saved.questions
-        currentIndex.value = saved.currentIndex
-        practiceStarted.value = saved.practiceStarted
-        showAnswer.value = saved.showAnswer
-        answeredQuestions.value = saved.answeredQuestions
-        config.count = saved.config?.count || 10
-        config.chapterIds = saved.config?.chapterIds || []
-        return true
-      } else {
-        // 清除保存的状态
-        store.clearSavedPracticeSession(practiceMode.value)
-      }
+      // 用户点击"继续"——恢复状态
+      questions.value = saved.questions
+      currentIndex.value = saved.currentIndex
+      practiceStarted.value = saved.practiceStarted
+      showAnswer.value = saved.showAnswer
+      answeredQuestions.value = saved.answeredQuestions
+      config.count = saved.config?.count || 10
+      config.chapterIds = saved.config?.chapterIds || []
+      return true
     } catch (error) {
-      // 用户点击取消或关闭
+      // 用户点击"重新开始"或关闭对话框——清除保存的状态
       store.clearSavedPracticeSession(practiceMode.value)
     }
   }

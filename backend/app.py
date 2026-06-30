@@ -2722,6 +2722,7 @@ def practice_plan_feedback():
             record.learning_repetition = 8  # 安排在8个题目之后出现
             record.today_consecutive_count = 0
             record.correct_at_learning_count = 0
+            record.completed = False
     
     record.last_review_date = today
     record.review_count += 1

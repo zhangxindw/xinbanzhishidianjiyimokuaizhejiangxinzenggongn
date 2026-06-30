@@ -146,6 +146,7 @@ const practiceStarted = ref(false)
 const memoryQuestionStatus = ref({})
 const memoryRemainCount = ref(0)
 const fontSize = ref(localStorage.getItem('practiceFontSize') || 'normal')
+const memoryLastAnswerCorrect = ref(null) // 记录上次答题是否正确（供下一题时处理重新插入）
 
 const currentStatus = computed(() => {
   if (!currentQuestion.value) return 'learning'
@@ -289,7 +290,10 @@ const submitAnswer = async () => {
   const questionId = currentQuestion.value.id
   const status = memoryQuestionStatus.value[questionId]
   const isCorrect = selectedOption.value === currentQuestion.value.answer
-  
+
+  // 保存答题结果，供 nextQuestion 处理重新插入
+  memoryLastAnswerCorrect.value = isCorrect
+
   // 提交反馈到后端
   try {
     const res = await axios.post('/api/practice-plan/feedback', {
@@ -297,13 +301,13 @@ const submitAnswer = async () => {
       feedback: isCorrect ? 'correct' : 'wrong',
       user_id: store.userId
     })
-    
+
     if (res.data.status === 'ok') {
       const data = res.data.data
       status.correctAtLearning = data.correct_at_learning_count || 0
       status.completed = data.completed || false
       status.status = data.status || status.status
-      
+
       if (status.completed) {
         memoryRemainCount.value--
       }
@@ -311,7 +315,7 @@ const submitAnswer = async () => {
   } catch (e) {
     console.error('Submit feedback failed:', e)
   }
-  
+
   // 提交答案记录
   try {
     await store.submitAnswer(currentQuestion.value.id, selectedOption.value, currentQuestion.value.answer)
@@ -320,18 +324,48 @@ const submitAnswer = async () => {
   }
 }
 
-const nextQuestion = () => {
+const nextQuestion = async () => {
+  // 记忆算法：处理当前题目的重新插入
+  if (memoryLastAnswerCorrect.value !== null && currentQuestion.value && showAnswer.value) {
+    const currentIdx = currentIndex.value
+    const questionId = currentQuestion.value.id
+    const status = memoryQuestionStatus.value[questionId]
+
+    if (status) {
+      // 从队列中移除当前题目
+      questions.value.splice(currentIdx, 1)
+
+      if (!status.completed) {
+        // 未完成：根据状态决定重新插入策略
+        if (status.status === 'learning') {
+          // 初学中：答对且累计>=2则毕业，否则按间隔重新插入
+          if (status.correctAtLearning < 2) {
+            const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(currentQuestion.value)))
+            const gap = memoryLastAnswerCorrect.value ? 12 : 8
+            const insertPos = Math.min(currentIdx + gap, questions.value.length)
+            questions.value.splice(insertPos, 0, reshuffledQ)
+          }
+        } else if (status.status === 'reviewing' && !memoryLastAnswerCorrect.value) {
+          // 复习中答错：打回初学，8题后重新出现
+          const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(currentQuestion.value)))
+          const insertPos = Math.min(currentIdx + 8, questions.value.length)
+          questions.value.splice(insertPos, 0, reshuffledQ)
+        }
+      }
+    }
+    memoryLastAnswerCorrect.value = null
+  }
+
   // 找下一个未完成的题目
-  let nextIdx = currentIndex.value + 1
+  let nextIdx = currentIndex.value
   while (nextIdx < questions.value.length) {
     const nextQ = questions.value[nextIdx]
-    if (!memoryQuestionStatus.value[nextQ.id]?.completed) {
+    if (nextQ && !memoryQuestionStatus.value[nextQ.id]?.completed) {
       currentIndex.value = nextIdx
       selectedOption.value = ''
       showAnswer.value = false
-      // 复习状态或初学阶段第二次出现时重新打乱选项
-      const status = memoryQuestionStatus.value[nextQ.id]
-      if (status?.status === 'reviewing' || (status?.status === 'learning' && status?.correctAtLearning >= 1)) {
+      const s = memoryQuestionStatus.value[nextQ.id]
+      if (s?.status === 'reviewing' || (s?.status === 'learning' && s?.correctAtLearning >= 1)) {
         shuffleOptions(questions.value[nextIdx])
       }
       window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -339,26 +373,24 @@ const nextQuestion = () => {
     }
     nextIdx++
   }
-  
-  // 检查是否还有未完成的题目
-  if (memoryRemainCount.value > 0) {
-    for (let i = 0; i < questions.value.length; i++) {
-      if (!memoryQuestionStatus.value[questions.value[i].id]?.completed) {
-        currentIndex.value = i
-        selectedOption.value = ''
-        showAnswer.value = false
-        // 复习状态或初学阶段第二次出现时重新打乱选项
-        const status = memoryQuestionStatus.value[questions.value[i].id]
-        if (status?.status === 'reviewing' || (status?.status === 'learning' && status?.correctAtLearning >= 1)) {
-          shuffleOptions(questions.value[i])
-        }
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        return
+
+  // 从头开始找
+  for (let i = 0; i < questions.value.length; i++) {
+    const q = questions.value[i]
+    if (q && !memoryQuestionStatus.value[q.id]?.completed) {
+      currentIndex.value = i
+      selectedOption.value = ''
+      showAnswer.value = false
+      const s = memoryQuestionStatus.value[q.id]
+      if (s?.status === 'reviewing' || (s?.status === 'learning' && s?.correctAtLearning >= 1)) {
+        shuffleOptions(questions.value[i])
       }
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
     }
   }
-  
-  // 所有题目都完成了
+
+  // 全部完成
   questions.value = []
 }
 
