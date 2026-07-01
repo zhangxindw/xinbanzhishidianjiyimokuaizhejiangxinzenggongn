@@ -153,7 +153,7 @@ const currentTask = computed(() => tasks.value[currentIndex.value] || null)
 const answered = ref(false)
 const isCorrect = ref(false)
 const fontSize = ref(localStorage.getItem('practiceFontSize') || 'normal')
-const taskRemoved = ref(false)
+const pendingInterval = ref(null)
 
 const loadTasks = async () => {
   loading.value = true
@@ -170,7 +170,7 @@ const loadTasks = async () => {
     currentIndex.value = 0
     answered.value = false
     isCorrect.value = false
-    taskRemoved.value = false
+    pendingInterval.value = null
   } catch (e) {
     console.error('Failed to load tasks:', e)
   }
@@ -180,43 +180,25 @@ const loadTasks = async () => {
 const submitAnswer = async (feedback) => {
   const task = currentTask.value
   if (!task) return
-  
+
   const userChoseCorrect = feedback === 'remembered'
   isCorrect.value = userChoseCorrect === task.is_correct
-  
+
   try {
     const res = await axios.post('/api/distinguish/plan/feedback', {
       record_id: task.id,
       feedback: feedback,
       user_id: store.userId || 'default_user'
     })
-    
+
     const repeatInfo = res.data.repeat_info
     if (repeatInfo && repeatInfo.interval !== undefined) {
-      const interval = repeatInfo.interval
-      
-      tasks.value.splice(currentIndex.value, 1)
-      
-      const insertPos = currentIndex.value + interval - 1
-      
-      if (insertPos >= tasks.value.length) {
-        tasks.value.push(task)
-      } else if (insertPos < 0) {
-        tasks.value.unshift(task)
-      } else {
-        tasks.value.splice(insertPos, 0, task)
-      }
-      
-      if (currentIndex.value >= tasks.value.length) {
-        currentIndex.value = 0
-      }
-      
-      taskRemoved.value = true
-      answered.value = true
+      pendingInterval.value = repeatInfo.interval
     } else {
-      taskRemoved.value = false
-      answered.value = true
+      pendingInterval.value = null
     }
+
+    answered.value = true
   } catch (e) {
     console.error('Submit feedback failed:', e)
     answered.value = true
@@ -224,14 +206,36 @@ const submitAnswer = async (feedback) => {
 }
 
 const nextQuestion = () => {
-  if (taskRemoved.value) {
-    taskRemoved.value = false
+  if (pendingInterval.value !== null) {
+    // 记忆算法：移除当前题目并按间隔重新插入
+    const task = currentTask.value
+    const interval = pendingInterval.value
+    pendingInterval.value = null
+
+    if (task) {
+      tasks.value.splice(currentIndex.value, 1)
+
+      const insertPos = currentIndex.value + interval - 1
+
+      if (insertPos >= tasks.value.length) {
+        tasks.value.push(task)
+      } else if (insertPos < 0) {
+        tasks.value.unshift(task)
+      } else {
+        tasks.value.splice(insertPos, 0, task)
+      }
+
+      if (currentIndex.value >= tasks.value.length) {
+        currentIndex.value = 0
+      }
+    }
+
     answered.value = false
     isCorrect.value = false
     window.scrollTo({ top: 0, behavior: 'smooth' })
     return
   }
-  
+
   if (currentIndex.value + 1 < tasks.value.length) {
     currentIndex.value++
     answered.value = false
@@ -241,7 +245,7 @@ const nextQuestion = () => {
     const hasDuplicates = tasks.value.some((task, index) => {
       return tasks.value.slice(index + 1).some(t => t.id === task.id)
     })
-    
+
     if (hasDuplicates) {
       currentIndex.value = 0
       answered.value = false
