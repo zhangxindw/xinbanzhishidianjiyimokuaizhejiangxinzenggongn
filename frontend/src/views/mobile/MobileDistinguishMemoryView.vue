@@ -8,7 +8,7 @@
         </button>
         <div class="header-title">
           <h1>辨析记忆</h1>
-          <span v-if="tasks.length > 0" class="progress-badge">{{ currentIndex + 1 }} / {{ tasks.length }}</span>
+          <span v-if="tasks.length > 0" class="progress-badge">剩余 {{ tasks.length }} 题</span>
         </div>
       </div>
       <div class="header-right">
@@ -107,7 +107,7 @@
 
         <!-- 下一题按钮 -->
         <button class="next-btn" @click="nextQuestion">
-          {{ currentIndex < tasks.length - 1 ? '下一题' : '完成练习' }}
+          {{ tasks.length > 0 ? '下一题' : '完成练习' }}
           <svg viewBox="0 0 1024 1024"><path fill="currentColor" d="M716.8 537.6a12.8 12.8 0 0 1 0 17.92L332.8 940.8a12.8 12.8 0 0 1-17.92-17.92l371.2-371.2-371.2-371.2a12.8 12.8 0 1 1 17.92-17.92z"></path></svg>
         </button>
       </div>
@@ -154,7 +154,9 @@ const answered = ref(false)
 const isCorrect = ref(false)
 const fontSize = ref(localStorage.getItem('practiceFontSize') || 'normal')
 const pendingInterval = ref(null)
+const pendingTaskId = ref(null)
 const isPracticeComplete = ref(false)
+const totalUniqueTasks = ref(0) // 初始加载的唯一任务总数，用于进度显示
 
 const loadTasks = async () => {
   loading.value = true
@@ -168,10 +170,12 @@ const loadTasks = async () => {
     } else {
       tasks.value = res.data.data || []
     }
+    totalUniqueTasks.value = tasks.value.length
     currentIndex.value = 0
     answered.value = false
     isCorrect.value = false
     pendingInterval.value = null
+    pendingTaskId.value = null
     isPracticeComplete.value = false
   } catch (e) {
     console.error('Failed to load tasks:', e)
@@ -186,6 +190,10 @@ const submitAnswer = async (feedback) => {
   const userChoseCorrect = feedback === 'remembered'
   isCorrect.value = userChoseCorrect === task.is_correct
 
+  // ★★★ 先清除之前的 pendingInterval，防止 API 失败时使用过期数据 ★★★
+  pendingInterval.value = null
+  pendingTaskId.value = null
+
   try {
     const res = await axios.post('/api/distinguish/plan/feedback', {
       record_id: task.id,
@@ -196,42 +204,59 @@ const submitAnswer = async (feedback) => {
     const repeatInfo = res.data.repeat_info
     if (repeatInfo && repeatInfo.interval !== undefined) {
       pendingInterval.value = repeatInfo.interval
+      pendingTaskId.value = task.id // 记录是哪个任务的 interval
     } else {
       pendingInterval.value = null
+      pendingTaskId.value = null
     }
 
     answered.value = true
   } catch (e) {
     console.error('Submit feedback failed:', e)
+    // API 失败时 pendingInterval 已清空，任务将毕业（不移出重复队列）
     answered.value = true
   }
 }
 
 const nextQuestion = () => {
-  // 从数组中移除当前题目（无论毕业还是重新插入都需要移除）
   const task = currentTask.value
 
-  if (pendingInterval.value !== null) {
-    // 需要重新插入：先移除，再按间隔放回
+  // ★★★ pendingInterval 必须匹配当前任务 ID，防止过期间隔误用 ★★★
+  if (pendingInterval.value !== null && pendingTaskId.value === task?.id) {
+    // 需要重新插入：先移除，再随机插入到至少 interval 题之后的位置
     const interval = pendingInterval.value
     pendingInterval.value = null
+    pendingTaskId.value = null
 
     if (task) {
       tasks.value.splice(currentIndex.value, 1)
 
-      const insertPos = currentIndex.value + interval - 1
+      // 答错(interval=8)固定在8题后；答对复验(interval=12)随机插入，防止假性记忆
+      const minPos = currentIndex.value + interval
+
+      let insertPos
+      if (interval === 8) {
+        // 答错：固定在 8 题之后的位置
+        insertPos = minPos >= tasks.value.length ? tasks.value.length : minPos
+      } else {
+        // 答对复验：在 [currentIndex + 12, tasks.length) 范围内随机，防止假性记忆
+        const maxPos = tasks.value.length
+        insertPos = minPos >= maxPos ? maxPos : minPos + Math.floor(Math.random() * (maxPos - minPos))
+      }
 
       if (insertPos >= tasks.value.length) {
         tasks.value.push(task)
-      } else if (insertPos < 0) {
-        tasks.value.unshift(task)
       } else {
         tasks.value.splice(insertPos, 0, task)
       }
     }
-  } else if (task) {
-    // 已毕业：直接移除，不再放回
-    tasks.value.splice(currentIndex.value, 1)
+  } else {
+    // 毕业或间隔不匹配：直接移除，不再放回
+    pendingInterval.value = null
+    pendingTaskId.value = null
+    if (task) {
+      tasks.value.splice(currentIndex.value, 1)
+    }
   }
 
   answered.value = false

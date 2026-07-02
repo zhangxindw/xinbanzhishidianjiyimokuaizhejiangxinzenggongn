@@ -354,7 +354,16 @@ const nextQuestion = async () => {
           if (status.correctAtLearning < 2) {
             const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(task)))
             const gap = memoryLastAnswerCorrect.value ? 12 : 8
-            const insertPos = Math.min(currentIdx + gap, questions.value.length)
+            const minPos = currentIdx + gap
+            const maxPos = questions.value.length
+            let insertPos
+            if (gap === 8) {
+              // 答错：固定在 8 题之后的位置
+              insertPos = minPos >= maxPos ? maxPos : minPos
+            } else {
+              // 答对：随机插入 [currentIdx + 12, questions.length) 范围，防止假性记忆
+              insertPos = minPos >= maxPos ? maxPos : minPos + Math.floor(Math.random() * (maxPos - minPos))
+            }
             questions.value.splice(insertPos, 0, reshuffledQ)
           }
         } else if (status.status === 'reviewing') {
@@ -363,6 +372,7 @@ const nextQuestion = async () => {
             status.status = 'learning'
             status.correctAtLearning = 0
             const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(task)))
+            // 答错：固定在 8 题之后的位置
             const insertPos = Math.min(currentIdx + 8, questions.value.length)
             questions.value.splice(insertPos, 0, reshuffledQ)
           }

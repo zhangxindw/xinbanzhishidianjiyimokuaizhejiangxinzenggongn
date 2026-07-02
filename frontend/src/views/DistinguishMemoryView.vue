@@ -10,7 +10,7 @@
           <div class="progress-bar">
             <div class="progress-fill" :style="{ width: ((currentIndex + 1) / tasks.length * 100) + '%' }"></div>
           </div>
-          <span class="progress-text">{{ currentIndex + 1 }} / {{ tasks.length }}</span>
+          <span class="progress-text">剩余 {{ tasks.length }} 题</span>
         </div>
       </div>
       <div class="header-right">
@@ -147,6 +147,8 @@ const resetFont = () => {
 const currentTask = computed(() => tasks.value[currentIndex.value] || null)
 
 const pendingInterval = ref(null)
+const pendingTaskId = ref(null)
+const totalUniqueTasks = ref(0)
 
 const loadTasks = async () => {
   try {
@@ -154,10 +156,12 @@ const loadTasks = async () => {
       params: { t: Date.now() }
     })
     tasks.value = res.data.data || []
+    totalUniqueTasks.value = tasks.value.length
     currentIndex.value = 0
     answered.value = false
     isCorrect.value = false
     pendingInterval.value = null
+    pendingTaskId.value = null
   } catch (e) { console.error(e) }
 }
 
@@ -168,6 +172,10 @@ const submitAnswer = async (feedback) => {
   const userChoseCorrect = (feedback === "remembered")
   isCorrect.value = userChoseCorrect === task.is_correct
 
+  // ★★★ 先清除之前的 pendingInterval，防止 API 失败时使用过期数据 ★★★
+  pendingInterval.value = null
+  pendingTaskId.value = null
+
   try {
     const res = await axios.post("/api/distinguish/plan/feedback", {
       record_id: task.id,
@@ -177,37 +185,61 @@ const submitAnswer = async (feedback) => {
     const repeatInfo = res.data.repeat_info
     if (repeatInfo && repeatInfo.interval !== undefined) {
       pendingInterval.value = repeatInfo.interval
+      pendingTaskId.value = task.id
     } else {
       pendingInterval.value = null
+      pendingTaskId.value = null
     }
 
     answered.value = true
-  } catch (e) { console.error(e) }
+  } catch (e) {
+    console.error(e)
+    pendingInterval.value = null
+    pendingTaskId.value = null
+    answered.value = true
+  }
 }
 
 const nextQuestion = () => {
   const task = currentTask.value
 
-  if (pendingInterval.value !== null) {
-    // 需要重新插入：先移除，再按间隔放回
+  // ★★★ pendingInterval 必须匹配当前任务 ID，防止过期间隔误用 ★★★
+  if (pendingInterval.value !== null && pendingTaskId.value === task?.id) {
+    // 需要重新插入：先移除，再随机插入到至少 interval 题之后的位置
     const interval = pendingInterval.value
     pendingInterval.value = null
+    pendingTaskId.value = null
 
     if (task) {
       tasks.value.splice(currentIndex.value, 1)
-      const insertPos = currentIndex.value + interval - 1
+
+      // 随机插入到 [currentIndex + interval, tasks.length) 范围内
+      // 题目不会固定在同一个位置出现，防止假性记忆
+      const minPos = currentIndex.value + interval
+      const maxPos = tasks.value.length
+
+      let insertPos
+      if (minPos >= maxPos) {
+        // 剩余题目不足，放到末尾
+        insertPos = maxPos
+      } else {
+        // 在合法范围内随机选择位置
+        insertPos = minPos + Math.floor(Math.random() * (maxPos - minPos))
+      }
 
       if (insertPos >= tasks.value.length) {
         tasks.value.push(task)
-      } else if (insertPos < 0) {
-        tasks.value.unshift(task)
       } else {
         tasks.value.splice(insertPos, 0, task)
       }
     }
-  } else if (task) {
-    // 已毕业：直接移除，不再放回
-    tasks.value.splice(currentIndex.value, 1)
+  } else {
+    // 毕业或间隔不匹配：直接移除，不再放回
+    pendingInterval.value = null
+    pendingTaskId.value = null
+    if (task) {
+      tasks.value.splice(currentIndex.value, 1)
+    }
   }
 
   answered.value = false
