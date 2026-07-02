@@ -2295,6 +2295,12 @@ def plan_feedback():
     # 记录原始状态和连续正确次数（在状态改变之前）
     original_status = record.status
     original_consecutive_count = record.today_consecutive_count
+
+    # ====== DEBUG LOG ======
+    print(f"\n=== 辨析记忆 feedback ===")
+    print(f"record_id={record_id}, feedback={fb}, user_id={user_id}")
+    print(f"原始状态: {original_status}, 原始连续答对: {original_consecutive_count}")
+    print(f"当前数据库: status={record.status}, today_consecutive_count={record.today_consecutive_count}, consecutive_correct={record.consecutive_correct}")
     
     if record.status == "learning":
         if fb == "remembered":
@@ -2339,6 +2345,12 @@ def plan_feedback():
     else:
         if fb == "forgot":
             repeat_info = {"interval": 8, "reason": "复习答错，打回初学，8题后再次出现"}
+
+    # ====== DEBUG LOG ======
+    print(f"计算后: status={record.status}, today_consecutive_count={record.today_consecutive_count}, consecutive_correct={record.consecutive_correct}")
+    print(f"repeat_info={repeat_info}")
+    print(f"返回数据: {{status: ok, record_id: {record.id}, interval: {repeat_info.get('interval') if repeat_info else 'None'}}}")
+    print(f"========================\n")
 
     return jsonify({
         "status": "ok", 

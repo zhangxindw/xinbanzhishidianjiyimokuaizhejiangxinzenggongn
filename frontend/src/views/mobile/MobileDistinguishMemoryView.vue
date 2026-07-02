@@ -177,6 +177,9 @@ const loadTasks = async () => {
     pendingInterval.value = null
     pendingTaskId.value = null
     isPracticeComplete.value = false
+    console.log('=== 辨析记忆: loadTasks ===')
+    console.log('加载题目数:', tasks.value.length)
+    console.log('题目列表:', tasks.value.map(t => ({ id: t.id, status: t.status, is_correct: t.is_correct })))
   } catch (e) {
     console.error('Failed to load tasks:', e)
   }
@@ -190,6 +193,10 @@ const submitAnswer = async (feedback) => {
   const userChoseCorrect = feedback === 'remembered'
   isCorrect.value = userChoseCorrect === task.is_correct
 
+  console.log('=== 辨析记忆: submitAnswer ===')
+  console.log('题目ID:', task.id, '| 用户选择:', feedback, '| 标准答案:', task.is_correct ? '正确' : '错误', '| 用户判断结果:', isCorrect.value ? '正确' : '错误')
+  console.log('当前索引:', currentIndex.value, '| 队列剩余:', tasks.value.length)
+
   // ★★★ 先清除之前的 pendingInterval，防止 API 失败时使用过期数据 ★★★
   pendingInterval.value = null
   pendingTaskId.value = null
@@ -197,20 +204,26 @@ const submitAnswer = async (feedback) => {
   try {
     const res = await axios.post('/api/distinguish/plan/feedback', {
       record_id: task.id,
-      feedback: feedback,
+      feedback: isCorrect.value ? 'remembered' : 'forgot',
       user_id: store.userId || 'default_user'
     })
+
+    console.log('→ 发送修正后feedback:', isCorrect.value ? 'remembered' : 'forgot', '(原始按钮:', feedback, ')')
+    console.log('后端反馈响应:', res.data)
 
     const repeatInfo = res.data.repeat_info
     if (repeatInfo && repeatInfo.interval !== undefined) {
       pendingInterval.value = repeatInfo.interval
       pendingTaskId.value = task.id // 记录是哪个任务的 interval
+      console.log('→ 需复验: interval =', repeatInfo.interval, ', 绑定 task.id =', task.id)
     } else {
       pendingInterval.value = null
       pendingTaskId.value = null
+      console.log('→ 毕业: 无 interval 或为 null')
     }
 
     answered.value = true
+    console.log('当前 pendingInterval:', pendingInterval.value, '| pendingTaskId:', pendingTaskId.value)
   } catch (e) {
     console.error('Submit feedback failed:', e)
     // API 失败时 pendingInterval 已清空，任务将毕业（不移出重复队列）
@@ -221,41 +234,55 @@ const submitAnswer = async (feedback) => {
 const nextQuestion = () => {
   const task = currentTask.value
 
+  console.log('')
+  console.log('=== 辨析记忆: nextQuestion ===')
+  console.log('当前题目:', task ? { id: task.id, is_correct: task.is_correct } : null)
+  console.log('pendingInterval:', pendingInterval.value, '| pendingTaskId:', pendingTaskId.value, '| task.id:', task?.id)
+
   // ★★★ pendingInterval 必须匹配当前任务 ID，防止过期间隔误用 ★★★
   if (pendingInterval.value !== null && pendingTaskId.value === task?.id) {
-    // 需要重新插入：先移除，再随机插入到至少 interval 题之后的位置
     const interval = pendingInterval.value
     pendingInterval.value = null
     pendingTaskId.value = null
+    console.log('→ 条件满足: 需要重新插入, interval =', interval)
 
     if (task) {
       tasks.value.splice(currentIndex.value, 1)
+      console.log('→ splice后: 队列长度', tasks.value.length, ', currentIndex仍为', currentIndex.value)
 
       // 答错(interval=8)固定在8题后；答对复验(interval=12)随机插入，防止假性记忆
       const minPos = currentIndex.value + interval
+      console.log('→ 计算位置: currentIndex=', currentIndex.value, '+ interval=', interval, '= minPos=', minPos, ', 队列长度=', tasks.value.length)
 
       let insertPos
       if (interval === 8) {
         // 答错：固定在 8 题之后的位置
         insertPos = minPos >= tasks.value.length ? tasks.value.length : minPos
+        console.log('→ 答错固定位置: insertPos =', insertPos)
       } else {
         // 答对复验：在 [currentIndex + 12, tasks.length) 范围内随机，防止假性记忆
         const maxPos = tasks.value.length
         insertPos = minPos >= maxPos ? maxPos : minPos + Math.floor(Math.random() * (maxPos - minPos))
+        console.log('→ 答对随机位置: minPos=', minPos, 'maxPos=', maxPos, '→ insertPos =', insertPos)
       }
 
       if (insertPos >= tasks.value.length) {
         tasks.value.push(task)
+        console.log('→ push到末尾, 插入后队列长度:', tasks.value.length)
       } else {
         tasks.value.splice(insertPos, 0, task)
+        console.log('→ splice插入到位置', insertPos, ', 插入后队列长度:', tasks.value.length)
       }
     }
   } else {
+    console.log('→ 条件不满足: 毕业, 直接移除')
+    console.log('  pendingInterval:', pendingInterval.value, 'pendingTaskId:', pendingTaskId.value, 'task?.id:', task?.id)
     // 毕业或间隔不匹配：直接移除，不再放回
     pendingInterval.value = null
     pendingTaskId.value = null
     if (task) {
       tasks.value.splice(currentIndex.value, 1)
+      console.log('→ 移除后队列长度:', tasks.value.length)
     }
   }
 
@@ -265,13 +292,18 @@ const nextQuestion = () => {
   // 判断是否全部完成
   if (tasks.value.length === 0) {
     isPracticeComplete.value = true
+    console.log('→ 全部完成!')
     return
   }
 
   // 如果 currentIndex 超出范围，回到开头继续
   if (currentIndex.value >= tasks.value.length) {
     currentIndex.value = 0
+    console.log('→ currentIndex越界, 重置为0')
   }
+
+  console.log('→ 下一题 newIndex:', currentIndex.value, '| 剩余队列:', tasks.value.length, '题')
+  console.log('当前队列ID顺序:', tasks.value.map(t => t.id))
 
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }

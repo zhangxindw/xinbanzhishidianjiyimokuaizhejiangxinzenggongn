@@ -179,7 +179,7 @@ const submitAnswer = async (feedback) => {
   try {
     const res = await axios.post("/api/distinguish/plan/feedback", {
       record_id: task.id,
-      feedback: feedback
+      feedback: isCorrect.value ? "remembered" : "forgot"
     })
 
     const repeatInfo = res.data.repeat_info
