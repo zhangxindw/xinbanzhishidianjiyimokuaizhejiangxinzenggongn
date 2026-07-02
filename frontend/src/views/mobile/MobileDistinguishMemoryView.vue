@@ -31,7 +31,7 @@
     </div>
 
     <!-- 无题目状态 -->
-    <div v-else-if="tasks.length === 0" class="empty-screen">
+    <div v-else-if="!isPracticeComplete && tasks.length === 0" class="empty-screen">
       <svg viewBox="0 0 1024 1024" class="empty-icon"><path fill="currentColor" d="M512 896a384 384 0 1 0 0-768 384 384 0 0 0 0 768m0 64a448 448 0 1 1 0-896 448 448 0 0 1 0 896"></path></svg>
       <h3>太棒了！</h3>
       <p>暂无待复习的辨析题</p>
@@ -114,7 +114,7 @@
     </div>
 
     <!-- 完成界面 -->
-    <div v-if="!loading && tasks.length > 0 && currentIndex >= tasks.length" class="complete-screen">
+    <div v-if="!loading && isPracticeComplete" class="complete-screen">
       <div class="result-dialog">
         <div class="result-header" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706dd 100%)">
           <div class="result-icon">🎉</div>
@@ -154,6 +154,7 @@ const answered = ref(false)
 const isCorrect = ref(false)
 const fontSize = ref(localStorage.getItem('practiceFontSize') || 'normal')
 const pendingInterval = ref(null)
+const isPracticeComplete = ref(false)
 
 const loadTasks = async () => {
   loading.value = true
@@ -171,6 +172,7 @@ const loadTasks = async () => {
     answered.value = false
     isCorrect.value = false
     pendingInterval.value = null
+    isPracticeComplete.value = false
   } catch (e) {
     console.error('Failed to load tasks:', e)
   }
@@ -206,9 +208,11 @@ const submitAnswer = async (feedback) => {
 }
 
 const nextQuestion = () => {
+  // 从数组中移除当前题目（无论毕业还是重新插入都需要移除）
+  const task = currentTask.value
+
   if (pendingInterval.value !== null) {
-    // 记忆算法：移除当前题目并按间隔重新插入
-    const task = currentTask.value
+    // 需要重新插入：先移除，再按间隔放回
     const interval = pendingInterval.value
     pendingInterval.value = null
 
@@ -224,37 +228,27 @@ const nextQuestion = () => {
       } else {
         tasks.value.splice(insertPos, 0, task)
       }
-
-      if (currentIndex.value >= tasks.value.length) {
-        currentIndex.value = 0
-      }
     }
+  } else if (task) {
+    // 已毕业：直接移除，不再放回
+    tasks.value.splice(currentIndex.value, 1)
+  }
 
-    answered.value = false
-    isCorrect.value = false
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+  answered.value = false
+  isCorrect.value = false
+
+  // 判断是否全部完成
+  if (tasks.value.length === 0) {
+    isPracticeComplete.value = true
     return
   }
 
-  if (currentIndex.value + 1 < tasks.value.length) {
-    currentIndex.value++
-    answered.value = false
-    isCorrect.value = false
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  } else {
-    const hasDuplicates = tasks.value.some((task, index) => {
-      return tasks.value.slice(index + 1).some(t => t.id === task.id)
-    })
-
-    if (hasDuplicates) {
-      currentIndex.value = 0
-      answered.value = false
-      isCorrect.value = false
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    } else {
-      currentIndex.value = tasks.value.length
-    }
+  // 如果 currentIndex 超出范围，回到开头继续
+  if (currentIndex.value >= tasks.value.length) {
+    currentIndex.value = 0
   }
+
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 const goBack = () => {

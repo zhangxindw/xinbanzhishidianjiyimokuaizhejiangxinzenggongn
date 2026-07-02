@@ -146,7 +146,7 @@ const resetFont = () => {
 
 const currentTask = computed(() => tasks.value[currentIndex.value] || null)
 
-const taskRemoved = ref(false)
+const pendingInterval = ref(null)
 
 const loadTasks = async () => {
   try {
@@ -157,7 +157,7 @@ const loadTasks = async () => {
     currentIndex.value = 0
     answered.value = false
     isCorrect.value = false
-    taskRemoved.value = false
+    pendingInterval.value = null
   } catch (e) { console.error(e) }
 }
 
@@ -173,15 +173,30 @@ const submitAnswer = async (feedback) => {
       record_id: task.id,
       feedback: feedback
     })
-    
+
     const repeatInfo = res.data.repeat_info
     if (repeatInfo && repeatInfo.interval !== undefined) {
-      const interval = repeatInfo.interval
-      
+      pendingInterval.value = repeatInfo.interval
+    } else {
+      pendingInterval.value = null
+    }
+
+    answered.value = true
+  } catch (e) { console.error(e) }
+}
+
+const nextQuestion = () => {
+  const task = currentTask.value
+
+  if (pendingInterval.value !== null) {
+    // 需要重新插入：先移除，再按间隔放回
+    const interval = pendingInterval.value
+    pendingInterval.value = null
+
+    if (task) {
       tasks.value.splice(currentIndex.value, 1)
-      
       const insertPos = currentIndex.value + interval - 1
-      
+
       if (insertPos >= tasks.value.length) {
         tasks.value.push(task)
       } else if (insertPos < 0) {
@@ -189,44 +204,24 @@ const submitAnswer = async (feedback) => {
       } else {
         tasks.value.splice(insertPos, 0, task)
       }
-      
-      if (currentIndex.value >= tasks.value.length) {
-        currentIndex.value = 0
-      }
-      
-      taskRemoved.value = true
-      answered.value = true
-    } else {
-      taskRemoved.value = false
-      answered.value = true
     }
-  } catch (e) { console.error(e) }
-}
+  } else if (task) {
+    // 已毕业：直接移除，不再放回
+    tasks.value.splice(currentIndex.value, 1)
+  }
 
-const nextQuestion = () => {
-  if (taskRemoved.value) {
-    taskRemoved.value = false
-    answered.value = false
-    isCorrect.value = false
+  answered.value = false
+  isCorrect.value = false
+
+  // 所有题目已毕业，返回规划页
+  if (tasks.value.length === 0) {
+    exitPractice()
     return
   }
-  
-  if (currentIndex.value + 1 < tasks.value.length) {
-    currentIndex.value++
-    answered.value = false
-    isCorrect.value = false
-  } else {
-    const hasDuplicates = tasks.value.some((task, index) => {
-      return tasks.value.slice(index + 1).some(t => t.id === task.id)
-    })
-    
-    if (hasDuplicates) {
-      currentIndex.value = 0
-      answered.value = false
-      isCorrect.value = false
-    } else {
-      exitPractice()
-    }
+
+  // currentIndex 超出范围则回到开头（处理重新插入的题目）
+  if (currentIndex.value >= tasks.value.length) {
+    currentIndex.value = 0
   }
 }
 

@@ -170,19 +170,24 @@ const shuffleArray = (array) => {
   return newArray
 }
 
-// 打乱选项顺序
+// 打乱选项顺序（使用原始选项反复打乱，与网页端一致）
 const shuffleOptions = (question) => {
   if (!question.options || question.options.length === 0) return question
-  
-  // 记录原始答案对应的选项文本
-  const currentAnswer = question.answer
-  const correctOption = question.options.find(opt => opt.label === currentAnswer)
-  const correctOptionText = correctOption ? correctOption.text : null
-  
-  // 打乱选项
-  const shuffledOptions = shuffleArray([...question.options])
+
+  // 保存原始选项和原始答案（首次调用时）
+  if (!question.original_options) {
+    question.original_options = [...question.options]
+    question.original_answer = question.answer
+  }
+
+  // 使用原始选项作为打乱基准，确保每次打乱都基于相同基准
+  const sourceOptions = question.original_options
+  const correctOptionText = sourceOptions.find(opt => opt.label === question.original_answer)?.text || ''
+
+  // 打乱原始选项的副本
+  const shuffledOptions = shuffleArray([...sourceOptions])
   const labels = ['A', 'B', 'C', 'D', 'E', 'F']
-  
+
   // 重新分配标签
   let newAnswer = ''
   for (let i = 0; i < shuffledOptions.length; i++) {
@@ -192,11 +197,11 @@ const shuffleOptions = (question) => {
       newAnswer = labels[i]
     }
   }
-  
+
   question.options = shuffledOptions
-  question.answer = newAnswer || currentAnswer
+  question.answer = newAnswer || question.original_answer
   question.shuffled = true
-  
+
   return question
 }
 
@@ -215,17 +220,23 @@ const loadTasks = async () => {
         memoryQuestionStatus.value = {}
         
         for (const t of tasks.value) {
+          const isCompleted = (t.correct_at_learning_count || 0) >= 2 || t.completed || false
           memoryQuestionStatus.value[t.question_id] = {
             correctAtLearning: t.correct_at_learning_count || 0,
             wrongCount: 0,
-            completed: t.completed || false,
-            status: t.status || 'learning',
+            completed: isCompleted,
+            status: isCompleted ? 'completed' : (t.status || 'learning'),
             record_id: t.id
           }
         }
-        
-        // 构建题目队列 - 直接使用任务数据，因为题目信息已经展开到顶层
-        questions.value = tasks.value.map(t => {
+
+        // 只保留未完成的题目（与网页端一致）
+        const activeTasks = tasks.value.filter(t => {
+          const s = memoryQuestionStatus.value[t.question_id]
+          return s && !s.completed
+        })
+
+        questions.value = activeTasks.map(t => {
           // 构建选项
           const options = []
           const labels = ['A', 'B', 'C', 'D', 'E', 'F']
@@ -325,10 +336,11 @@ const submitAnswer = async () => {
 }
 
 const nextQuestion = async () => {
-  // 记忆算法：处理当前题目的重新插入
   if (memoryLastAnswerCorrect.value !== null && currentQuestion.value && showAnswer.value) {
+    // ★★★ 必须在 splice 之前保存当前题目，splice 后 currentQuestion 会变成下一题 ★★★
+    const task = currentQuestion.value
     const currentIdx = currentIndex.value
-    const questionId = currentQuestion.value.id
+    const questionId = task.id
     const status = memoryQuestionStatus.value[questionId]
 
     if (status) {
@@ -340,16 +352,21 @@ const nextQuestion = async () => {
         if (status.status === 'learning') {
           // 初学中：答对且累计>=2则毕业，否则按间隔重新插入
           if (status.correctAtLearning < 2) {
-            const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(currentQuestion.value)))
+            const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(task)))
             const gap = memoryLastAnswerCorrect.value ? 12 : 8
             const insertPos = Math.min(currentIdx + gap, questions.value.length)
             questions.value.splice(insertPos, 0, reshuffledQ)
           }
-        } else if (status.status === 'reviewing' && !memoryLastAnswerCorrect.value) {
-          // 复习中答错：打回初学，8题后重新出现
-          const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(currentQuestion.value)))
-          const insertPos = Math.min(currentIdx + 8, questions.value.length)
-          questions.value.splice(insertPos, 0, reshuffledQ)
+        } else if (status.status === 'reviewing') {
+          if (!memoryLastAnswerCorrect.value) {
+            // 复习中答错：8题后重新出现，打回初学状态
+            status.status = 'learning'
+            status.correctAtLearning = 0
+            const reshuffledQ = shuffleOptions(JSON.parse(JSON.stringify(task)))
+            const insertPos = Math.min(currentIdx + 8, questions.value.length)
+            questions.value.splice(insertPos, 0, reshuffledQ)
+          }
+          // 复习中答对：毕业（completed=true），不重新插入
         }
       }
     }
